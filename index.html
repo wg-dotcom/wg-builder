@@ -780,6 +780,38 @@ Return ONLY valid JSON: {"primary":"#XXXXXX","dark":"#XXXXXX","highlight":"#XXXX
     console.log('AI enhancement unavailable, using heuristics:', e.message);
   }
 
+  // ─── STEP 3: LOGO RELIABILITY CHAIN ───
+  // Test if a URL loads as a valid image
+  function testImage(imgUrl) {
+    return new Promise(resolve => {
+      const img = new Image();
+      img.onload = () => resolve(img.naturalWidth > 1);
+      img.onerror = () => resolve(false);
+      setTimeout(() => resolve(false), 4000);
+      img.src = imgUrl;
+    });
+  }
+
+  // Verify existing logo
+  if (logo) {
+    const valid = await testImage(logo);
+    if (!valid) { console.log('Logo URL broken, trying fallbacks:', logo); logo = ''; }
+  }
+
+  // If no valid logo, try a chain of guaranteed sources
+  if (!logo) {
+    const domain = new URL(url).hostname.replace('www.', '');
+    const fallbacks = [
+      `https://www.google.com/s2/favicons?domain=${domain}&sz=128`,
+      `https://${domain}/apple-touch-icon.png`,
+      `https://${domain}/favicon.ico`
+    ];
+    for (const tryUrl of fallbacks) {
+      const valid = await testImage(tryUrl);
+      if (valid) { logo = tryUrl; break; }
+    }
+  }
+
   // ─── APPLY RESULTS ───
   const found = [];
 
