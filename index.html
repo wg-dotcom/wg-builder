@@ -843,30 +843,36 @@ function fetchSheetViaJSONP(sheetId) {
       delete window[callbackName];
       script.remove();
       reject(new Error('Sheet request timed out'));
-    }, 10000);
+    }, 15000);
+
+    function parseTable(response) {
+      if (!response || !response.table) { reject(new Error('Empty response from sheet')); return; }
+      const table = response.table;
+      const headers = table.cols.map(c => c.label || '');
+      // If all headers are empty, try using first data row as headers
+      const allEmpty = headers.every(h => !h.trim());
+      const rows = allEmpty ? [] : [headers];
+      table.rows.forEach(r => {
+        rows.push(r.c.map(cell => cell ? (cell.v !== null && cell.v !== undefined ? String(cell.v) : '') : ''));
+      });
+      // If we skipped headers, use first row as headers
+      if (allEmpty && rows.length > 0) rows.unshift(rows[0].map(v => v));
+      resolve(rows);
+    }
 
     window[callbackName] = function(response) {
       clearTimeout(timeout);
       delete window[callbackName];
       script.remove();
-      try {
-        if (!response || !response.table) { reject(new Error('Empty response')); return; }
-        const table = response.table;
-        const headers = table.cols.map(c => c.label || '');
-        const rows = [headers];
-        table.rows.forEach(r => {
-          rows.push(r.c.map(cell => cell ? (cell.v !== null && cell.v !== undefined ? String(cell.v) : '') : ''));
-        });
-        resolve(rows);
-      } catch(e) { reject(e); }
+      try { parseTable(response); } catch(e) { reject(e); }
     };
 
     const script = document.createElement('script');
-    script.src = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:json;responseHandler=${callbackName}`;
+    script.src = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:json;responseHandler=${callbackName}&headers=1`;
     script.onerror = () => {
       clearTimeout(timeout);
       delete window[callbackName];
-      reject(new Error('Failed to load sheet'));
+      reject(new Error('Failed to load sheet. Make sure it is shared as "Anyone with the link → Viewer".'));
     };
     document.body.appendChild(script);
   });
@@ -910,7 +916,7 @@ async function pullFromSheet() {
       }
     }
 
-    if (rows.length < 2) { showStatus('error', 'Sheet appears empty.'); return; }
+    if (rows.length < 2) { showStatus('error', `Sheet appears empty (${rows.length} rows found). Make sure the sheet is shared as "Anyone with the link" and has data with headers in row 1.`); return; }
 
     const headers = rows[0].map(h => h.trim().toLowerCase());
     // Find candidate name column — prioritize "candidate name" / "full name", exclude client/customer/company/contact name
