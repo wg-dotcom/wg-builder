@@ -537,230 +537,54 @@ function syncColor(id, val) {
 // AUTO-EXTRACT BRANDING FROM CLIENT WEBSITE
 // ═══════════════════════════════════════════════════════════════
 async function fetchWithProxy(url) {
-  // Strategy 1: allorigins.win /get endpoint (returns JSON with contents field)
-  try {
-    const resp = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(url)}`, { signal: AbortSignal.timeout(8000) });
-    if (resp.ok) {
-      const data = await resp.json();
-      if (data.contents) return data.contents;
-    }
-  } catch(e) {}
+  // Race all proxies simultaneously — first valid response wins
+  const proxyUrls = [
+    { url: `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`, json: true },
+    { url: `https://corsproxy.io/?url=${encodeURIComponent(url)}`, json: false },
+    { url: `https://api.codetabs.com/v1/proxy/?quest=${encodeURIComponent(url)}`, json: false },
+    { url: url, json: false } // direct fetch as fallback
+  ];
 
-  // Strategy 2: corsproxy.io
-  try {
-    const resp = await fetch(`https://corsproxy.io/?url=${encodeURIComponent(url)}`, { signal: AbortSignal.timeout(8000) });
-    if (resp.ok) return await resp.text();
-  } catch(e) {}
+  const racePromises = proxyUrls.map(async (p) => {
+    try {
+      const resp = await fetch(p.url, { signal: AbortSignal.timeout(5000) });
+      if (!resp.ok) throw new Error('not ok');
+      if (p.json) {
+        const data = await resp.json();
+        if (data.contents) return data.contents;
+        throw new Error('no contents');
+      }
+      return await resp.text();
+    } catch(e) { throw e; }
+  });
 
-  // Strategy 3: codetabs
   try {
-    const resp = await fetch(`https://api.codetabs.com/v1/proxy/?quest=${encodeURIComponent(url)}`, { signal: AbortSignal.timeout(8000) });
-    if (resp.ok) return await resp.text();
-  } catch(e) {}
-
-  // Last resort: direct fetch (works if target allows CORS)
-  try {
-    const resp = await fetch(url, { signal: AbortSignal.timeout(8000) });
-    if (resp.ok) return await resp.text();
-  } catch(e) {}
-
-  return null; // Return null instead of throwing — callers handle gracefully
+    return await Promise.any(racePromises);
+  } catch(e) {
+    return null;
+  }
 }
 
 async function extractBranding() {
   const url = document.getElementById('clientUrl').value.trim();
   if (!url) { showBrandStatus('error', 'Enter a client website URL first.'); return; }
 
-  showBrandStatus('loading', 'Scanning website for brand colors, fonts, and logo...');
+  showBrandStatus('loading', 'Detecting brand identity...');
 
-  // Global timeout: if the whole process takes >30s, bail out with whatever we have
+  // Global timeout
   const brandingTimeout = setTimeout(() => {
     showBrandStatus('error', 'Detection timed out. Enter colors, fonts, and logo manually.');
-  }, 30000);
+  }, 20000);
 
   let logo = '';
   let detectedColors = { primary: '', dark: '', highlight: '' };
   let detectedFonts = { heading: '', body: '' };
-  let method = ''; // track how we got results
+  let method = '';
 
-  // ─── STEP 1: FETCH SITE HTML VIA CORS ───
-  let html = null;
-  try {
-    html = await fetchWithProxy(url);
-  } catch(e) {}
+  // ─── RUN CORS SCRAPE + AI IN PARALLEL ───
+  const brandPrompt = `You are a brand identity expert. Given a company website URL, identify their exact brand colors, typography, and logo URL.
 
-  if (html) {
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(html, 'text/html');
-
-    // ── LOGO ──
-    const ogImage = doc.querySelector('meta[property="og:image"]');
-    if (ogImage) logo = ogImage.getAttribute('content');
-
-    if (!logo) {
-      const touchIcon = doc.querySelector('link[rel="apple-touch-icon"]');
-      if (touchIcon) logo = touchIcon.getAttribute('href');
-    }
-
-    if (!logo) {
-      const imgs = doc.querySelectorAll('img');
-      for (const img of imgs) {
-        const src = (img.getAttribute('src') || '').toLowerCase();
-        const alt = (img.getAttribute('alt') || '').toLowerCase();
-        const cls = (img.getAttribute('class') || '').toLowerCase();
-        if (src.includes('logo') || alt.includes('logo') || cls.includes('logo')) {
-          logo = img.getAttribute('src');
-          break;
-        }
-      }
-    }
-
-    if (!logo) {
-      const favicon = doc.querySelector('link[rel="icon"], link[rel="shortcut icon"]');
-      if (favicon) logo = favicon.getAttribute('href');
-    }
-
-    if (logo && !logo.startsWith('http')) {
-      try { logo = new URL(logo, url).href; } catch(e) {}
-    }
-
-    // ── COLORS (heuristic extraction) ──
-    const styleEls = doc.querySelectorAll('style');
-    let cssText = Array.from(styleEls).map(s => s.textContent).join(' ');
-
-    // Also try external stylesheets
-    const cssLinks = Array.from(doc.querySelectorAll('link[rel="stylesheet"]'))
-      .map(l => l.getAttribute('href'))
-      .filter(h => h && !h.includes('fonts.googleapis.com') && !h.includes('font-awesome'));
-    for (const cssHref of cssLinks.slice(0, 3)) {
-      try {
-        let fullUrl = cssHref;
-        if (!fullUrl.startsWith('http')) {
-          try { fullUrl = new URL(cssHref, url).href; } catch(e) { continue; }
-        }
-        const extCSS = await fetchWithProxy(fullUrl);
-        if (extCSS && extCSS.length < 500000) cssText += ' ' + extCSS;
-      } catch(e) {}
-    }
-
-    // theme-color meta
-    const themeColor = doc.querySelector('meta[name="theme-color"]')?.getAttribute('content') || '';
-
-    // CSS custom properties with brand-like names
-    const brandVars = {};
-    const varMatches = cssText.matchAll(/--([a-zA-Z-]+):\s*(#[0-9a-fA-F]{3,8})/gi);
-    for (const m of varMatches) {
-      brandVars[m[1].toLowerCase()] = m[2];
-    }
-
-    // Check for obvious brand variables
-    const primaryVarNames = ['primary', 'brand', 'accent', 'main', 'theme', 'color-primary', 'brand-primary', 'brand-color'];
-    const darkVarNames = ['dark', 'navy', 'bg-dark', 'header-bg', 'bg-primary'];
-    const highlightVarNames = ['secondary', 'highlight', 'accent-light', 'cta', 'brand-secondary', 'success', 'brand-accent'];
-
-    for (const n of primaryVarNames) {
-      if (brandVars[n]) { detectedColors.primary = brandVars[n]; break; }
-    }
-    for (const n of darkVarNames) {
-      if (brandVars[n]) { detectedColors.dark = brandVars[n]; break; }
-    }
-    for (const n of highlightVarNames) {
-      if (brandVars[n]) { detectedColors.highlight = brandVars[n]; break; }
-    }
-
-    // Fallback: frequency analysis of all hex colors
-    if (!detectedColors.primary) {
-      if (themeColor && /^#[0-9a-fA-F]{3,8}$/.test(themeColor)) {
-        detectedColors.primary = themeColor;
-      } else {
-        const allHex = cssText.match(/#[0-9a-fA-F]{6}/g) || [];
-        const hexFreq = {};
-        allHex.forEach(h => { const l = h.toLowerCase(); hexFreq[l] = (hexFreq[l] || 0) + 1; });
-        const colorCandidates = Object.entries(hexFreq)
-          .filter(([c]) => {
-            const rgb = hexToRGB(c);
-            const avg = (rgb.r + rgb.g + rgb.b) / 3;
-            const sat = Math.max(rgb.r, rgb.g, rgb.b) - Math.min(rgb.r, rgb.g, rgb.b);
-            return avg > 30 && avg < 220 && sat > 40; // skip grays, blacks, whites
-          })
-          .sort((a,b) => b[1] - a[1]);
-
-        if (colorCandidates[0]) detectedColors.primary = colorCandidates[0][0];
-        if (colorCandidates[1]) detectedColors.highlight = colorCandidates[1][0];
-
-        // Find a dark color (low brightness, any saturation)
-        const darkCandidates = Object.entries(hexFreq)
-          .filter(([c]) => {
-            const rgb = hexToRGB(c);
-            const avg = (rgb.r + rgb.g + rgb.b) / 3;
-            return avg >= 5 && avg < 60;
-          })
-          .sort((a,b) => b[1] - a[1]);
-        if (darkCandidates[0]) detectedColors.dark = darkCandidates[0][0];
-      }
-    }
-
-    // Derive missing colors
-    if (detectedColors.primary && !detectedColors.dark) {
-      const rgb = hexToRGB(detectedColors.primary);
-      detectedColors.dark = '#' + [rgb.r, rgb.g, rgb.b].map(c => Math.max(0, Math.floor(c * 0.15)).toString(16).padStart(2, '0')).join('');
-    }
-    if (detectedColors.primary && !detectedColors.highlight) {
-      const rgb = hexToRGB(detectedColors.primary);
-      detectedColors.highlight = '#' + [rgb.r, rgb.g, rgb.b].map(c => Math.min(255, Math.floor(c * 1.3 + 40)).toString(16).padStart(2, '0')).join('');
-    }
-
-    // ── FONTS ──
-    // Google Fonts links
-    const googleFontLinks = Array.from(doc.querySelectorAll('link[href*="fonts.googleapis.com"]'))
-      .map(l => l.getAttribute('href')).filter(Boolean);
-    const googleFontNames = [];
-    googleFontLinks.forEach(link => {
-      const families = link.match(/family=([^&;]+)/g) || [];
-      families.forEach(f => {
-        const name = decodeURIComponent(f.replace('family=', '')).replace(/\+/g, ' ').split(':')[0].split('@')[0].trim();
-        if (name && !googleFontNames.includes(name)) googleFontNames.push(name);
-      });
-    });
-
-    if (googleFontNames.length >= 2) {
-      detectedFonts.heading = googleFontNames[0];
-      detectedFonts.body = googleFontNames[1];
-    } else if (googleFontNames.length === 1) {
-      detectedFonts.heading = googleFontNames[0];
-      detectedFonts.body = googleFontNames[0];
-    }
-
-    // If no Google Fonts, check font-family rules for common web fonts
-    if (!detectedFonts.heading) {
-      const fontFamilyMatches = cssText.match(/font-family:\s*['"]?([^'";}\n,]+)/gi) || [];
-      const fontMap = { 'montserrat': 'Montserrat', 'poppins': 'Poppins', 'roboto': 'Roboto', 'open sans': 'Open Sans',
-        'lato': 'Lato', 'raleway': 'Raleway', 'nunito': 'Nunito', 'playfair': 'Playfair Display', 'oswald': 'Oswald',
-        'dm sans': 'DM Sans', 'work sans': 'Work Sans', 'source sans': 'Source Sans 3', 'pt sans': 'PT Sans',
-        'merriweather': 'Merriweather', 'rubik': 'Rubik', 'manrope': 'Manrope', 'outfit': 'Outfit', 'inter': 'Inter',
-        'space grotesk': 'Space Grotesk', 'plus jakarta': 'Plus Jakarta Sans', 'figtree': 'Figtree', 'lexend': 'Lexend' };
-      for (const ff of fontFamilyMatches) {
-        const clean = ff.replace(/font-family:\s*/i, '').replace(/['"]/g, '').trim().toLowerCase();
-        for (const [key, val] of Object.entries(fontMap)) {
-          if (clean.includes(key)) {
-            if (!detectedFonts.heading) detectedFonts.heading = val;
-            else if (!detectedFonts.body && val !== detectedFonts.heading) detectedFonts.body = val;
-            break;
-          }
-        }
-      }
-    }
-
-    if (detectedColors.primary) method = 'css';
-  }
-
-  // ─── STEP 2: AI ENHANCEMENT (if available, refines/overrides heuristics) ───
-  try {
-    showBrandStatus('loading', 'Using AI to verify brand identity...');
-    const cssContext = method === 'css' ? `\nHeuristic detection found: primary=${detectedColors.primary}, dark=${detectedColors.dark}, highlight=${detectedColors.highlight}, fonts=${detectedFonts.heading}/${detectedFonts.body}. Verify or correct these.` : '';
-    const brandPrompt = `You are a brand identity expert. Given a company website URL, identify their exact brand colors, typography, and logo.
-
-WEBSITE URL: ${url}${cssContext}
+WEBSITE URL: ${url}
 
 Provide:
 1. PRIMARY COLOR: Main brand color (buttons, links, logo). NOT gray/black/white.
@@ -772,20 +596,72 @@ Provide:
 
 Return ONLY valid JSON: {"primary":"#XXXXXX","dark":"#XXXXXX","highlight":"#XXXXXX","fontHeading":"Name","fontBody":"Name","logoUrl":""}`;
 
-    let json = await callAI(brandPrompt, 200);
-    if (json.startsWith('```')) json = json.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
-    const aiResult = JSON.parse(json);
+  // Fire both in parallel
+  const [html, aiJson] = await Promise.allSettled([
+    fetchWithProxy(url),
+    callAI(brandPrompt, 200).catch(() => null)
+  ]);
 
-    // AI overrides heuristics
-    if (aiResult.primary && /^#[0-9a-fA-F]{6}$/.test(aiResult.primary)) detectedColors.primary = aiResult.primary;
-    if (aiResult.dark && /^#[0-9a-fA-F]{6}$/.test(aiResult.dark)) detectedColors.dark = aiResult.dark;
-    if (aiResult.highlight && /^#[0-9a-fA-F]{6}$/.test(aiResult.highlight)) detectedColors.highlight = aiResult.highlight;
-    if (aiResult.fontHeading) detectedFonts.heading = aiResult.fontHeading;
-    if (aiResult.fontBody) detectedFonts.body = aiResult.fontBody;
-    if (!logo && aiResult.logoUrl) logo = aiResult.logoUrl;
-    method = 'ai';
-  } catch(e) {
-    console.log('AI enhancement unavailable, using heuristics:', e.message);
+  // ── Process AI result (fast, reliable) ──
+  try {
+    let json = aiJson.status === 'fulfilled' && aiJson.value ? aiJson.value : null;
+    if (json) {
+      if (json.startsWith('```')) json = json.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
+      const ai = JSON.parse(json);
+      if (ai.primary && /^#[0-9a-fA-F]{6}$/.test(ai.primary)) detectedColors.primary = ai.primary;
+      if (ai.dark && /^#[0-9a-fA-F]{6}$/.test(ai.dark)) detectedColors.dark = ai.dark;
+      if (ai.highlight && /^#[0-9a-fA-F]{6}$/.test(ai.highlight)) detectedColors.highlight = ai.highlight;
+      if (ai.fontHeading) detectedFonts.heading = ai.fontHeading;
+      if (ai.fontBody) detectedFonts.body = ai.fontBody;
+      if (ai.logoUrl) logo = ai.logoUrl;
+      method = 'ai';
+    }
+  } catch(e) { console.log('AI parse failed:', e.message); }
+
+  // ── Process CORS scrape (logo + font enrichment) ──
+  const siteHtml = html.status === 'fulfilled' ? html.value : null;
+  if (siteHtml) {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(siteHtml, 'text/html');
+
+    // Logo from HTML (more reliable than AI guess)
+    let htmlLogo = '';
+    const ogImage = doc.querySelector('meta[property="og:image"]');
+    if (ogImage) htmlLogo = ogImage.getAttribute('content');
+    if (!htmlLogo) { const ti = doc.querySelector('link[rel="apple-touch-icon"]'); if (ti) htmlLogo = ti.getAttribute('href'); }
+    if (!htmlLogo) {
+      for (const img of doc.querySelectorAll('img')) {
+        const s = (img.getAttribute('src') || '').toLowerCase();
+        const a = (img.getAttribute('alt') || '').toLowerCase();
+        const c = (img.getAttribute('class') || '').toLowerCase();
+        if (s.includes('logo') || a.includes('logo') || c.includes('logo')) { htmlLogo = img.getAttribute('src'); break; }
+      }
+    }
+    if (!htmlLogo) { const fi = doc.querySelector('link[rel="icon"], link[rel="shortcut icon"]'); if (fi) htmlLogo = fi.getAttribute('href'); }
+    if (htmlLogo && !htmlLogo.startsWith('http')) { try { htmlLogo = new URL(htmlLogo, url).href; } catch(e) {} }
+    if (htmlLogo) logo = htmlLogo; // HTML logo overrides AI guess
+
+    // Fonts from Google Fonts links (more precise than AI)
+    const gfLinks = Array.from(doc.querySelectorAll('link[href*="fonts.googleapis.com"]')).map(l => l.getAttribute('href')).filter(Boolean);
+    const gfNames = [];
+    gfLinks.forEach(link => {
+      (link.match(/family=([^&;]+)/g) || []).forEach(f => {
+        const name = decodeURIComponent(f.replace('family=', '')).replace(/\+/g, ' ').split(':')[0].split('@')[0].trim();
+        if (name && !gfNames.includes(name)) gfNames.push(name);
+      });
+    });
+    if (gfNames.length >= 2) { detectedFonts.heading = gfNames[0]; detectedFonts.body = gfNames[1]; }
+    else if (gfNames.length === 1) { detectedFonts.heading = gfNames[0]; if (!detectedFonts.body) detectedFonts.body = gfNames[0]; }
+
+    // Colors from CSS vars (more precise than AI for sites that use them)
+    const cssText = Array.from(doc.querySelectorAll('style')).map(s => s.textContent).join(' ');
+    const brandVars = {};
+    for (const m of cssText.matchAll(/--([a-zA-Z-]+):\s*(#[0-9a-fA-F]{3,8})/gi)) brandVars[m[1].toLowerCase()] = m[2];
+    for (const n of ['primary', 'brand', 'accent', 'main', 'theme', 'color-primary', 'brand-primary']) { if (brandVars[n]) { detectedColors.primary = brandVars[n]; break; } }
+    for (const n of ['dark', 'navy', 'bg-dark', 'header-bg']) { if (brandVars[n]) { detectedColors.dark = brandVars[n]; break; } }
+    for (const n of ['secondary', 'highlight', 'accent-light', 'cta', 'brand-secondary']) { if (brandVars[n]) { detectedColors.highlight = brandVars[n]; break; } }
+
+    if (!method) method = 'css';
   }
 
   // ─── STEP 3: LOGO RELIABILITY CHAIN ───
