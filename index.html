@@ -363,8 +363,16 @@
         <div class="form-section">
           <div class="form-section-title">Context & Pain Points</div>
           <div class="form-group">
-            <label>Key context from NotebookLM or client calls (used in recruiter notes)</label>
-            <textarea id="contextNotes" rows="6" placeholder="Pain points, urgency, specific needs, what the client cares about most..."></textarea>
+            <label>Quick pain points and priorities</label>
+            <textarea id="contextNotes" rows="4" placeholder="What the client cares about most: urgency, specific needs, dealbreakers..."></textarea>
+          </div>
+        </div>
+
+        <div class="form-section">
+          <div class="form-section-title">📓 Deep Context (NotebookLM / Research)</div>
+          <div class="form-group">
+            <label>Paste your NotebookLM notes, call transcripts, or research here. The more context, the better the AI writes.</label>
+            <textarea id="notebookContext" rows="10" placeholder="Paste from NotebookLM, Granola transcripts, client emails, research notes...&#10;&#10;Examples:&#10;- Call notes: 'Client mentioned they lost 2 ops managers in 6 months, need someone who can hit the ground running...'&#10;- Company research: 'Series B, 45 employees, expanding to LATAM...'&#10;- Role specifics: 'Must know HubSpot + Salesforce migration, reporting to COO directly...'"></textarea>
           </div>
         </div>
 
@@ -1569,6 +1577,9 @@ async function generateAINotes() {
     showAIStatus('loading', `Writing notes for ${c.name} (${i + 1}/${candidates.length})...`);
 
     try {
+      // Get NotebookLM context if provided
+      const notebookContext = document.getElementById('notebookContext')?.value?.trim() || '';
+
       const prompt = `You are Jesus Pacheco, Head of White Glove Hirings at Sagan. You're writing candidate presentation notes for a premium client page. This goes directly to the client. It needs to feel like YOU wrote it, not an AI.
 
 YOUR WRITING RULES (non-negotiable):
@@ -1584,6 +1595,18 @@ YOUR WRITING RULES (non-negotiable):
 - Use the CLIENT'S own language and terminology from their website. Mirror how they talk about their business.
 - Position candidates AGAINST EACH OTHER in the batch. Who is strongest at what. Be honest about trade-offs.
 
+THE SOMMELIER APPROACH (weave this in naturally, don't force it):
+You present candidates like a sommelier presents wine. Not just specs, but body, finish, complexity. Paint a three-dimensional picture of who they are, how they work, where they'll thrive. Use this vocabulary naturally when it fits:
+- Presence: "polished", "scrappy", "magnetic", "steady", "grounded", "the adult in the room", "brings the energy you wish everyone had"
+- Capability: "heavyweight", "nimble", "the whole package", "built for the long haul", "operates at a different level", "surprisingly well-rounded"
+- Working style: "thinks like an owner", "gets their hands dirty", "runs through walls", "finds the elegant solution", "ships, doesn't just plan", "doesn't need a playbook"
+- Impact: "creates momentum that outlasts their involvement", "builds systems, not dependencies", "solves problems that stay solved", "sets a new standard"
+- Special sauce: "builder DNA", "operator mindset", "Swiss Army knife", "force multiplier", "the hire that unlocks other hires"
+- Value: "investment-grade", "pays for themselves in 90 days", "high ROI relative to salary", "the necessity disguised as a luxury"
+- Risk: "safe bet", "the calculated risk worth taking", "all signal, some noise", "betting on trajectory over resume", "sleep easy at night hire"
+- Fit framing: "pairs beautifully with...", "built for [stage]", "thrives in [environment]"
+Pick 2-3 of these per candidate MAX. Don't list them. Weave them into the narrative so it reads as human insight, not a checklist.
+
 CLIENT:
 - Company: ${v.clientName}
 - Role: ${v.roleTitle}
@@ -1591,6 +1614,7 @@ CLIENT:
 - Budget: ${v.salaryRange || 'Not specified'}
 - Schedule: ${v.schedule || 'Full-time, US hours'}
 ${clientSiteContext}
+${notebookContext ? `\nDEEP CONTEXT (from research notes, use this heavily for understanding the client, the role, and what matters):\n${notebookContext}` : ''}
 
 ALL CANDIDATES IN THIS BATCH (for comparative positioning):
 ${allCandsSummary}
@@ -1605,20 +1629,20 @@ CANDIDATE TO WRITE ABOUT NOW (#${i+1} of ${candidates.length}):
 
 REFERENCE EXAMPLES (match this quality and style exactly):
 
-Example 1 (Wingz recruiter note):
-"Gildardo is your strongest Django-first match. Four consecutive full-stack roles all centered on Django + DRF, with hands-on React Native on every project. He has the exact stack you need: scalable REST APIs, PostgreSQL optimization, and AWS deployment. His track record in fully remote teams, owning features end-to-end, maps directly to how Wingz operates. At $4K/mo he sits at the top of your budget but brings the deepest technical alignment of the three."
+Example 1 (Wingz recruiter note with sommelier touch):
+"Gildardo is your strongest Django-first match. Four consecutive full-stack roles all centered on Django + DRF, with hands-on React Native on every project. He has the exact stack you need: scalable REST APIs, PostgreSQL optimization, and AWS deployment. His track record in fully remote teams, owning features end-to-end, maps directly to how Wingz operates. At $4K/mo he sits at the top of your budget but brings the deepest technical alignment of the three. Heavyweight operator. Built for the long haul."
 
 Example 2 (DIS "Why He Fits" + "What He Solves"):
 Why: "Menard is a heavily certified Microsoft specialist currently working as a Service Desk Engineer at an MSP. He lives in the exact environment DIS operates in: remote ticket management, M365 tenant administration, and Active Directory troubleshooting. His day-to-day already mirrors the Technical Client Liaison role."
-Solves: "He handles the bread-and-butter issues that are eating your senior engineers' time: password resets, connectivity problems, Exchange Online configurations, printer issues. He does it through ConnectWise and Kaseya, tools your team already understands. Minimal ramp-up needed."
+Solves: "He handles the bread-and-butter issues that are eating your senior engineers' time: password resets, connectivity problems, Exchange Online configurations, printer issues. He does it through ConnectWise and Kaseya, tools your team already understands. Minimal ramp-up needed. Sleep easy at night hire."
 
-Notice: specific tools named, client's world referenced directly, pain points addressed concretely, comparative language ("strongest", "most cost-effective"), honest about trade-offs ("lighter experience but...").
+Notice: specific tools named, client's world referenced directly, pain points addressed concretely, comparative language ("strongest", "most cost-effective"), honest about trade-offs ("lighter experience but..."), sommelier descriptors woven in naturally at the end or middle, never as a list.
 
 GENERATE TWO SECTIONS as JSON:
 
-1. "why": 3-5 bullet points for "Why [First Name]". Each bullet starts with a concrete skill, tool, or achievement. Map it to what the client actually needs. Reference specific tools by name. If there's a gap, be honest but frame it constructively. Separate bullets with \\n.
+1. "why": 3-5 bullet points for "Why [First Name]". Each bullet starts with a concrete skill, tool, or achievement. Map it to what the client actually needs. Reference specific tools by name. If there's a gap, be honest but frame it constructively. Weave in 1-2 sommelier descriptors naturally. Separate bullets with \\n.
 
-2. "note": 2-3 sentences as Recruiter's Note. Position this candidate relative to the batch. What's their angle? What pain point do they solve? Is the salary worth it? Direct and honest. Sound like Jesus writing fast, not a recruitment brochure.
+2. "note": 2-3 sentences as Recruiter's Note. Position this candidate relative to the batch. What's their angle? What pain point do they solve? Is the salary worth it? End or close with a sommelier-style read on the candidate (one phrase, not a paragraph). Direct and honest. Sound like Jesus writing fast, not a recruitment brochure.
 
 Return ONLY valid JSON. No markdown, no code fences.
 {"why": "bullet 1\\nbullet 2\\nbullet 3", "note": "the note"}`;
