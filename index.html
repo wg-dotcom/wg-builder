@@ -221,8 +221,8 @@
     <div class="sidebar">
       <div class="step-tabs">
         <button class="step-tab active" onclick="switchTab(0)">1. Client</button>
-        <button class="step-tab" onclick="switchTab(1)">2. Candidates</button>
-        <button class="step-tab" onclick="switchTab(2)">3. Context</button>
+        <button class="step-tab" onclick="switchTab(1)">2. Context</button>
+        <button class="step-tab" onclick="switchTab(2)">3. Candidates</button>
       </div>
 
       <!-- ── TAB 1: CLIENT INFO ── -->
@@ -317,41 +317,8 @@
       </div>
 
       <!-- ── TAB 2: CANDIDATES ── -->
+      <!-- ── TAB 2: CONTEXT ── -->
       <div class="step-content" id="tab-1">
-        <div class="form-section">
-          <div class="form-section-title">Pull from Google Sheet</div>
-          <div class="form-group">
-            <label>Google Sheet URL</label>
-            <input type="url" id="sheetUrl" value="https://docs.google.com/spreadsheets/d/1jfja4wRpk4hyvdGq4HxU-D-7i6FDnUc_dBM4s0Fho0Q/edit" />
-          </div>
-          <div id="filterPreview" style="font-size:12px;color:var(--text-dim);padding:8px 12px;background:var(--bg);border-radius:8px;margin-bottom:12px;">
-            Filters from Client tab: <strong id="filterPreviewText">fill in Tab 1 first</strong>
-          </div>
-          <button class="btn btn-accent" onclick="pullFromSheet()" style="width:100%; justify-content: center;">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9"/></svg>
-            Pull Candidates from Sheet
-          </button>
-          <div id="sheetStatus" class="sheet-status"></div>
-        </div>
-
-        <div class="form-section">
-          <div class="form-section-title">Candidates (<span id="candidateCount">0</span>)</div>
-          <div id="candidateList" class="candidate-list">
-            <p style="font-size: 13px; color: var(--text-dim);">No candidates loaded yet. Pull from Google Sheet above, or add manually below.</p>
-          </div>
-          <button class="btn btn-ghost" onclick="addManualCandidate()" style="width:100%; justify-content: center; margin-top: 12px;">
-            + Add Candidate Manually
-          </button>
-          <button class="btn btn-accent" id="aiNotesBtn" onclick="generateAINotes()" style="width:100%; justify-content: center; margin-top: 10px;">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-            Generate AI Notes
-          </button>
-          <div id="aiStatus" class="sheet-status"></div>
-        </div>
-      </div>
-
-      <!-- ── TAB 3: CONTEXT ── -->
-      <div class="step-content" id="tab-2">
         <div class="form-section">
           <div class="form-section-title">Intro Message</div>
           <div class="form-group">
@@ -386,6 +353,40 @@
             <label>Schedule / Timezone</label>
             <input type="text" id="schedule" value="Full-time · US hours" />
           </div>
+        </div>
+      </div>
+
+      <!-- ── TAB 3: CANDIDATES ── -->
+      <div class="step-content" id="tab-2">
+        <div class="form-section">
+          <div class="form-section-title">Pull from Google Sheet</div>
+          <div class="form-group">
+            <label>Google Sheet URL</label>
+            <input type="url" id="sheetUrl" value="https://docs.google.com/spreadsheets/d/1jfja4wRpk4hyvdGq4HxU-D-7i6FDnUc_dBM4s0Fho0Q/edit" />
+          </div>
+          <div id="filterPreview" style="font-size:12px;color:var(--text-dim);padding:8px 12px;background:var(--bg);border-radius:8px;margin-bottom:12px;">
+            Filters from Client tab: <strong id="filterPreviewText">fill in Tab 1 first</strong>
+          </div>
+          <button class="btn btn-accent" onclick="pullFromSheet()" style="width:100%; justify-content: center;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9"/></svg>
+            Pull Candidates from Sheet
+          </button>
+          <div id="sheetStatus" class="sheet-status"></div>
+        </div>
+
+        <div class="form-section">
+          <div class="form-section-title">Candidates (<span id="candidateCount">0</span>)</div>
+          <div id="candidateList" class="candidate-list">
+            <p style="font-size: 13px; color: var(--text-dim);">No candidates loaded yet. Pull from Google Sheet above, or add manually below.</p>
+          </div>
+          <button class="btn btn-ghost" onclick="addManualCandidate()" style="width:100%; justify-content: center; margin-top: 12px;">
+            + Add Candidate Manually
+          </button>
+          <button class="btn btn-accent" id="aiNotesBtn" onclick="generateAINotes()" style="width:100%; justify-content: center; margin-top: 10px;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+            Generate AI Notes
+          </button>
+          <div id="aiStatus" class="sheet-status"></div>
         </div>
       </div>
 
@@ -857,14 +858,18 @@ function fetchSheetViaJSONP(sheetId) {
       if (!response || !response.table) { reject(new Error('Empty response from sheet')); return; }
       const table = response.table;
       const headers = table.cols.map(c => c.label || '');
-      // If all headers are empty, try using first data row as headers
       const allEmpty = headers.every(h => !h.trim());
-      const rows = allEmpty ? [] : [headers];
-      table.rows.forEach(r => {
-        rows.push(r.c.map(cell => cell ? (cell.v !== null && cell.v !== undefined ? String(cell.v) : '') : ''));
-      });
-      // If we skipped headers, use first row as headers
-      if (allEmpty && rows.length > 0) rows.unshift(rows[0].map(v => v));
+      // Convert all data rows
+      const dataRows = table.rows.map(r =>
+        r.c.map(cell => cell ? (cell.v !== null && cell.v !== undefined ? String(cell.v) : '') : '')
+      );
+      let rows;
+      if (allEmpty) {
+        // Headers are empty: first data row IS the header row
+        rows = dataRows;
+      } else {
+        rows = [headers, ...dataRows];
+      }
       resolve(rows);
     }
 
@@ -876,7 +881,7 @@ function fetchSheetViaJSONP(sheetId) {
     };
 
     const script = document.createElement('script');
-    script.src = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:json;responseHandler=${callbackName}&headers=1`;
+    script.src = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:json;responseHandler=${callbackName}`;
     script.onerror = () => {
       clearTimeout(timeout);
       delete window[callbackName];
