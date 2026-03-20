@@ -686,7 +686,10 @@ Return ONLY valid JSON:
 
     const found = [];
     if (logo) found.push('logo');
-    if (uniqueColors.length > 0) found.push(`${uniqueColors.length} brand color${uniqueColors.length > 1 ? 's' : ''}`);
+    const detectedPrimary = document.getElementById('colorPrimaryHex').value;
+    if (detectedPrimary && detectedPrimary !== '#0D9488') found.push('colors');
+    const detectedFont = document.getElementById('fontHeading').value;
+    if (detectedFont && detectedFont !== 'Inter') found.push('fonts');
 
     if (found.length > 0) {
       showBrandStatus('success', `Detected: ${found.join(', ')}. Review and adjust if needed.`);
