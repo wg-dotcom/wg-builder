@@ -717,7 +717,10 @@ async function pullFromSheet() {
     if (rows.length < 2) { showStatus('error', 'Sheet appears empty.'); return; }
 
     const headers = rows[0].map(h => h.trim().toLowerCase());
-    const nameIdx = headers.findIndex(h => h.includes('name') && !h.includes('company'));
+    // Find candidate name column — prioritize "candidate name" / "full name", exclude client/customer/company/contact name
+    let nameIdx = headers.findIndex(h => h.includes('candidate') && h.includes('name'));
+    if (nameIdx < 0) nameIdx = headers.findIndex(h => h.includes('full name'));
+    if (nameIdx < 0) nameIdx = headers.findIndex(h => h.includes('name') && !h.includes('company') && !h.includes('client') && !h.includes('customer') && !h.includes('contact'));
     const companyIdx = headers.findIndex(h => h.includes('company'));
     const batchIdx = headers.findIndex(h => h.includes('batch'));
     const titleIdx = headers.findIndex(h => h.includes('title') || h.includes('role'));
