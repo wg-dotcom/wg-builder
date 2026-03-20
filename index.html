@@ -709,6 +709,7 @@ async function pullFromSheet() {
     const headers = rows[0].map(h => h.trim().toLowerCase());
     const nameIdx = headers.findIndex(h => h.includes('name') && !h.includes('company'));
     const companyIdx = headers.findIndex(h => h.includes('company'));
+    const batchIdx = headers.findIndex(h => h.includes('batch'));
     const titleIdx = headers.findIndex(h => h.includes('title') || h.includes('role'));
     const resumeIdx = headers.findIndex(h => h.includes('resume'));
     const videoIdx = headers.findIndex(h => h.includes('video'));
@@ -726,6 +727,7 @@ async function pullFromSheet() {
       if (!row || row.length < 2) continue;
 
       const company = companyIdx >= 0 ? (row[companyIdx] || '').trim() : '';
+      const batch = batchIdx >= 0 ? (row[batchIdx] || '').trim() : '';
       const title = titleIdx >= 0 ? (row[titleIdx] || '').trim() : '';
 
       const name = nameIdx >= 0 ? (row[nameIdx] || '').trim() : '';
@@ -733,7 +735,11 @@ async function pullFromSheet() {
 
       // Apply filters (all must match if provided)
       if (filterCompany && !company.toLowerCase().includes(filterCompany)) continue;
-      if (filterBatch && !company.toLowerCase().includes('batch ' + filterBatch)) continue;
+      if (filterBatch) {
+        // Check dedicated batch column first, then fall back to looking in company name
+        const batchMatch = batch ? batch.toLowerCase().includes(filterBatch) : company.toLowerCase().includes('batch ' + filterBatch);
+        if (!batchMatch) continue;
+      }
       if (filterTitle && !title.toLowerCase().includes(filterTitle)) continue;
 
       candidates.push({
@@ -754,7 +760,8 @@ async function pullFromSheet() {
 
     updateCandidateList();
     const filters = [filterCompany && `company: "${filterCompany}"`, filterBatch && `batch: ${filterBatch}`, filterTitle && `title: "${filterTitle}"`].filter(Boolean).join(', ') || 'no filters';
-    showStatus('success', `Found ${candidates.length} candidate${candidates.length !== 1 ? 's' : ''} (${filters}).`);
+    const cols = [nameIdx >= 0 && 'name', companyIdx >= 0 && 'company', batchIdx >= 0 && 'batch', titleIdx >= 0 && 'title', resumeIdx >= 0 && 'resume', videoIdx >= 0 && 'video', tapIdx >= 0 && 'TAP'].filter(Boolean).join(', ');
+    showStatus('success', `Found ${candidates.length} candidate${candidates.length !== 1 ? 's' : ''} (${filters}). Columns detected: ${cols}.`);
 
   } catch (err) {
     showStatus('error', 'Error: ' + err.message);
