@@ -308,10 +308,18 @@
             <label>Google Sheet URL</label>
             <input type="url" id="sheetUrl" value="https://docs.google.com/spreadsheets/d/1jfja4wRpk4hyvdGq4HxU-D-7i6FDnUc_dBM4s0Fho0Q/edit" />
           </div>
+          <div class="form-group">
+            <label>Filter: Company Name contains</label>
+            <input type="text" id="filterCompany" placeholder="e.g. Wingz" />
+          </div>
           <div class="form-row">
             <div class="form-group">
-              <label>Filter: Company Name contains</label>
-              <input type="text" id="sheetFilter" placeholder="e.g. Batch 1 for Wingz" />
+              <label>Filter: Batch Number</label>
+              <input type="text" id="filterBatch" placeholder="e.g. 1" />
+            </div>
+            <div class="form-group">
+              <label>Filter: Title / Role</label>
+              <input type="text" id="filterTitle" placeholder="e.g. Operations Team Lead" />
             </div>
           </div>
           <button class="btn btn-accent" onclick="pullFromSheet()" style="width:100%; justify-content: center;">
@@ -658,7 +666,9 @@ function fetchSheetViaJSONP(sheetId) {
 async function pullFromSheet() {
   const statusEl = document.getElementById('sheetStatus');
   const url = document.getElementById('sheetUrl').value.trim();
-  const filter = document.getElementById('sheetFilter').value.trim().toLowerCase();
+  const filterCompany = document.getElementById('filterCompany').value.trim().toLowerCase();
+  const filterBatch = document.getElementById('filterBatch').value.trim().toLowerCase();
+  const filterTitle = document.getElementById('filterTitle').value.trim().toLowerCase();
 
   if (!url) { showStatus('error', 'Please enter a Google Sheet URL.'); return; }
 
@@ -707,9 +717,12 @@ async function pullFromSheet() {
       if (!row || row.length < 2) continue;
 
       const company = companyIdx >= 0 ? (row[companyIdx] || '').trim() : '';
+      const title = titleIdx >= 0 ? (row[titleIdx] || '').trim() : '';
 
-      // Apply filter
-      if (filter && !company.toLowerCase().includes(filter)) continue;
+      // Apply all three filters (all must match if provided)
+      if (filterCompany && !company.toLowerCase().includes(filterCompany)) continue;
+      if (filterBatch && !company.toLowerCase().includes('batch ' + filterBatch)) continue;
+      if (filterTitle && !title.toLowerCase().includes(filterTitle)) continue;
 
       const name = nameIdx >= 0 ? (row[nameIdx] || '').trim() : '';
       if (!name) continue;
@@ -731,7 +744,8 @@ async function pullFromSheet() {
     }
 
     updateCandidateList();
-    showStatus('success', `Found ${candidates.length} candidates matching "${filter || 'all'}".`);
+    const filters = [filterCompany && `company: "${filterCompany}"`, filterBatch && `batch: ${filterBatch}`, filterTitle && `title: "${filterTitle}"`].filter(Boolean).join(', ') || 'no filters';
+    showStatus('success', `Found ${candidates.length} candidate${candidates.length !== 1 ? 's' : ''} (${filters}).`);
 
   } catch (err) {
     showStatus('error', 'Error: ' + err.message);
