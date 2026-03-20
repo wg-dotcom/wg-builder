@@ -1351,36 +1351,82 @@ async function generateAINotes() {
   const apiKey = _ak_get();
   let successCount = 0;
 
+  // Fetch client website content for richer context and to mirror their language
+  let clientSiteContext = '';
+  if (v.clientUrl) {
+    showAIStatus('loading', 'Scanning client website for context...');
+    try {
+      const siteHTML = await fetchWithProxy(v.clientUrl);
+      const siteParser = new DOMParser();
+      const siteDoc = siteParser.parseFromString(siteHTML, 'text/html');
+      const metaDesc = siteDoc.querySelector('meta[name="description"]')?.getAttribute('content') || '';
+      const headings = Array.from(siteDoc.querySelectorAll('h1, h2, h3')).map(h => h.textContent.trim()).filter(Boolean).slice(0, 15).join(' | ');
+      const bodyText = siteDoc.body?.innerText?.slice(0, 2000) || '';
+      clientSiteContext = `\nCLIENT WEBSITE CONTENT (use their language and terminology when describing fit):\nMeta: ${metaDesc}\nHeadings: ${headings}\nPage text: ${bodyText}`;
+    } catch(e) { clientSiteContext = ''; }
+  }
+
+  // Build all-candidates summary for comparative positioning
+  const allCandsSummary = candidates.map((c, i) => `${i+1}. ${c.name} | ${c.location || '?'} | ${c.experience || '?'} exp | ${c.salary || '?'}/mo | Skills: ${c.skills || '?'} | TAP: ${c.tap ? 'Yes' : 'No'}`).join('\n');
+
   for (let i = 0; i < candidates.length; i++) {
     const c = candidates[i];
-    showAIStatus('loading', `Generating notes for ${c.name} (${i + 1}/${candidates.length})...`);
+    showAIStatus('loading', `Writing notes for ${c.name} (${i + 1}/${candidates.length})...`);
 
     try {
-      const prompt = `You are a senior recruiter at Sagan's White Glove division writing candidate presentation notes for a client. Write in a direct, confident, human tone. No corporate fluff. Be specific, not generic.
+      const prompt = `You are Jesus Pacheco, Head of White Glove Hirings at Sagan. You're writing candidate presentation notes for a premium client page. This goes directly to the client. It needs to feel like YOU wrote it, not an AI.
 
-CLIENT CONTEXT:
+YOUR WRITING RULES (non-negotiable):
+- Sound like a sharp person who types fast, not a document
+- Short sentences. Real rhythm. Some can run on a bit and that's fine.
+- NEVER use em dashes as connectors. Use periods, commas, colons.
+- NEVER use corporate jargon: "leveraging", "synergy", "best-in-class", "value-add", "strong profile", "immediate impact", "well-positioned", "comprehensive", "proven track record"
+- NEVER use passive voice
+- NEVER wrap up paragraphs neatly with a bow. Leave some roughness.
+- Lead with specifics: tool names, company names, numbers, concrete achievements
+- Story over specs. One specific detail beats five adjectives.
+- When something is impressive, say it once, directly. Don't oversell.
+- Use the CLIENT'S own language and terminology from their website. Mirror how they talk about their business.
+- Position candidates AGAINST EACH OTHER in the batch. Who is strongest at what. Be honest about trade-offs.
+
+CLIENT:
 - Company: ${v.clientName}
 - Role: ${v.roleTitle}
-- Pain points & needs: ${v.contextNotes || 'Not provided'}
-- Salary range: ${v.salaryRange || 'Not specified'}
+- Pain points, context, what they care about: ${v.contextNotes || 'Not provided'}
+- Budget: ${v.salaryRange || 'Not specified'}
 - Schedule: ${v.schedule || 'Full-time, US hours'}
+${clientSiteContext}
 
-CANDIDATE:
+ALL CANDIDATES IN THIS BATCH (for comparative positioning):
+${allCandsSummary}
+
+CANDIDATE TO WRITE ABOUT NOW (#${i+1} of ${candidates.length}):
 - Name: ${c.name}
 - Location: ${c.location || 'Not specified'}
 - Experience: ${c.experience || 'Not specified'}
 - Skills: ${c.skills || 'Not specified'}
-- Salary expectation: ${c.salary || 'Not specified'}
+- Salary: ${c.salary || 'Not specified'}
 - TAP Certified: ${c.tap ? 'Yes' : 'No'}
 
-Generate exactly TWO sections in JSON format:
+REFERENCE EXAMPLES (match this quality and style exactly):
 
-1. "why": A "Why [First Name]" section. Write 3-5 bullet points (separated by \\n) explaining why this candidate fits this specific role. Reference their concrete skills, experience, and how they map to the client's pain points and needs. Use the style: specific, measurable, role-relevant. Each bullet should start with a strong lead (skill or achievement first). Do NOT use generic language like "strong profile" or "immediate impact."
+Example 1 (Wingz recruiter note):
+"Gildardo is your strongest Django-first match. Four consecutive full-stack roles all centered on Django + DRF, with hands-on React Native on every project. He has the exact stack you need: scalable REST APIs, PostgreSQL optimization, and AWS deployment. His track record in fully remote teams, owning features end-to-end, maps directly to how Wingz operates. At $4K/mo he sits at the top of your budget but brings the deepest technical alignment of the three."
 
-2. "note": A "Recruiter's Note" — 2-3 sentences positioning this candidate. Reference their strongest differentiator, how they solve a specific client pain point, and their value at their salary. Write as the recruiter speaking directly to the client. Confident, direct, no fluff.
+Example 2 (DIS "Why He Fits" + "What He Solves"):
+Why: "Menard is a heavily certified Microsoft specialist currently working as a Service Desk Engineer at an MSP. He lives in the exact environment DIS operates in: remote ticket management, M365 tenant administration, and Active Directory troubleshooting. His day-to-day already mirrors the Technical Client Liaison role."
+Solves: "He handles the bread-and-butter issues that are eating your senior engineers' time: password resets, connectivity problems, Exchange Online configurations, printer issues. He does it through ConnectWise and Kaseya, tools your team already understands. Minimal ramp-up needed."
 
-IMPORTANT: Return ONLY valid JSON. No markdown, no code fences. Format:
-{"why": "bullet 1\\nbullet 2\\nbullet 3", "note": "recruiter note text"}`;
+Notice: specific tools named, client's world referenced directly, pain points addressed concretely, comparative language ("strongest", "most cost-effective"), honest about trade-offs ("lighter experience but...").
+
+GENERATE TWO SECTIONS as JSON:
+
+1. "why": 3-5 bullet points for "Why [First Name]". Each bullet starts with a concrete skill, tool, or achievement. Map it to what the client actually needs. Reference specific tools by name. If there's a gap, be honest but frame it constructively. Separate bullets with \\n.
+
+2. "note": 2-3 sentences as Recruiter's Note. Position this candidate relative to the batch. What's their angle? What pain point do they solve? Is the salary worth it? Direct and honest. Sound like Jesus writing fast, not a recruitment brochure.
+
+Return ONLY valid JSON. No markdown, no code fences.
+{"why": "bullet 1\\nbullet 2\\nbullet 3", "note": "the note"}`;
 
       const resp = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
@@ -1392,7 +1438,7 @@ IMPORTANT: Return ONLY valid JSON. No markdown, no code fences. Format:
         },
         body: JSON.stringify({
           model: 'claude-sonnet-4-20250514',
-          max_tokens: 600,
+          max_tokens: 700,
           messages: [{ role: 'user', content: prompt }]
         })
       });
@@ -1405,15 +1451,18 @@ IMPORTANT: Return ONLY valid JSON. No markdown, no code fences. Format:
       const data = await resp.json();
       const text = data.content[0].text.trim();
 
-      // Parse JSON response
-      const parsed = JSON.parse(text);
+      // Parse JSON — handle possible markdown wrapping
+      let jsonStr = text;
+      if (jsonStr.startsWith('```')) {
+        jsonStr = jsonStr.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
+      }
+      const parsed = JSON.parse(jsonStr);
       if (parsed.why) c.summary = parsed.why;
       if (parsed.note) c.recruiterNote = parsed.note;
       successCount++;
 
     } catch (err) {
       console.error(`AI notes failed for ${c.name}:`, err);
-      // Continue to next candidate
     }
   }
 
@@ -1422,11 +1471,11 @@ IMPORTANT: Return ONLY valid JSON. No markdown, no code fences. Format:
   btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg> Generate AI Notes';
 
   if (successCount === candidates.length) {
-    showAIStatus('success', `Generated notes for all ${successCount} candidates. Preview to see the result.`);
+    showAIStatus('success', `Notes done for all ${successCount} candidates. Hit Preview to see them.`);
   } else if (successCount > 0) {
-    showAIStatus('success', `Generated notes for ${successCount}/${candidates.length} candidates. Some failed. Preview to see results.`);
+    showAIStatus('success', `Got ${successCount}/${candidates.length} done. Some failed. Check Preview.`);
   } else {
-    showAIStatus('error', 'Failed to generate notes. Check API key and try again.');
+    showAIStatus('error', 'Failed to generate notes. Check console for errors.');
   }
 }
 
