@@ -572,7 +572,8 @@ Return ONLY valid JSON: {"primary":"#XXXXXX","dark":"#XXXXXX","highlight":"#XXXX
   try {
     let json = aiJson.status === 'fulfilled' && aiJson.value ? aiJson.value : null;
     if (json) {
-      if (json.startsWith('```')) json = json.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
+      json = json.replace(/^[\s\S]*?```(?:json)?\s*\n?/i, '').replace(/\n?\s*```[\s\S]*$/, '');
+      if (!json.trim().startsWith('{')) { const m = json.match(/\{[\s\S]*\}/); if (m) json = m[0]; }
       const ai = JSON.parse(json);
       if (ai.primary && /^#[0-9a-fA-F]{6}$/.test(ai.primary)) detectedColors.primary = ai.primary;
       if (ai.dark && /^#[0-9a-fA-F]{6}$/.test(ai.dark)) detectedColors.dark = ai.dark;
@@ -1536,12 +1537,23 @@ GENERATE TWO SECTIONS as JSON:
 Return ONLY valid JSON. No markdown, no code fences.
 {"why": "bullet 1\\nbullet 2\\nbullet 3", "note": "the note"}`;
 
-      const text = await callAI(prompt, 700);
+      const text = await callAI(prompt, 1000);
 
-      // Parse JSON — handle possible markdown wrapping
+      // Robust JSON parsing — handle markdown, extra text, truncation
       let jsonStr = text;
-      if (jsonStr.startsWith('```')) {
-        jsonStr = jsonStr.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
+      // Strip markdown code fences (any format)
+      jsonStr = jsonStr.replace(/^[\s\S]*?```(?:json)?\s*\n?/i, '').replace(/\n?\s*```[\s\S]*$/, '');
+      // If still no leading {, extract JSON object from anywhere in the text
+      if (!jsonStr.trim().startsWith('{')) {
+        const match = jsonStr.match(/\{[\s\S]*\}/);
+        if (match) jsonStr = match[0];
+      }
+      // Fix truncated JSON: ensure closing brace and quote
+      jsonStr = jsonStr.trim();
+      if (!jsonStr.endsWith('}')) {
+        // Likely truncated mid-string. Close the string and object.
+        if (jsonStr.match(/"[^"]*$/)) jsonStr += '"';
+        if (!jsonStr.endsWith('}')) jsonStr += '}';
       }
       const parsed = JSON.parse(jsonStr);
       if (parsed.why) c.summary = parsed.why;
