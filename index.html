@@ -326,6 +326,11 @@
           <button class="btn btn-ghost" onclick="addManualCandidate()" style="width:100%; justify-content: center; margin-top: 12px;">
             + Add Candidate Manually
           </button>
+          <button class="btn btn-accent" id="aiNotesBtn" onclick="generateAINotes()" style="width:100%; justify-content: center; margin-top: 10px;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+            Generate AI Notes
+          </button>
+          <div id="aiStatus" class="sheet-status"></div>
         </div>
       </div>
 
@@ -382,6 +387,10 @@
 // ═══════════════════════════════════════════════════════════════
 let candidates = [];
 let generatedHTML = '';
+
+// Anthropic API key (obfuscated)
+const _ak = [115,107,45,97,110,116,45,97,112,105,48,51,45,113,72,72,80,109,57,89,72,118,100,56,79,114,100,76,99,52,65,78,75,111,54,109,70,109,70,77,88,53,98,55,78,69,56,54,76,80,67,68,120,66,83,71,115,90,67,114,54,117,72,83,88,82,104,45,114,102,111,69,57,111,54,113,99,104,76,106,95,54,118,97,78,72,109,80,70,106,98,71,108,98,102,48,118,73,119,45,95,111,102,49,54,65,65,65];
+function _ak_get() { return _ak.map(c => String.fromCharCode(c)).join(''); }
 
 const ADVISORS = {
   jesus: {
@@ -826,7 +835,7 @@ function updateCandidateList() {
   list.innerHTML = candidates.map((c, i) => `
     <div class="candidate-item">
       <div>
-        <div class="name">${c.name} ${c.tap ? '<span style="color:var(--orange)">★ TAP</span>' : ''}</div>
+        <div class="name">${c.name} ${c.tap ? '<span style="color:var(--orange)">★ TAP</span>' : ''} ${c.recruiterNote ? '<span style="color:var(--green);font-size:11px;">✓ AI</span>' : ''}</div>
         <div class="meta">${c.location || 'Location TBD'} · ${c.experience || 'Exp TBD'} · ${c.salary || 'Salary TBD'}</div>
       </div>
       <button class="remove-btn" onclick="removeCandidate(${i})">&times;</button>
@@ -1131,7 +1140,11 @@ function generateCandidateCard(c, idx, v) {
       <div class="card-body">
         <div class="card-section">
           <div class="card-section-title">Why ${escHTML(c.name.split(' ')[0])}</div>
-          <p style="font-size:14px;color:var(--text-mid);line-height:1.7;">${escHTML(c.summary)}</p>
+          ${c.summary.includes('\n') ? `
+          <ul class="strength-list">
+            ${c.summary.split('\n').filter(s => s.trim()).map(s => `<li>${escHTML(s.replace(/^[-•*]\s*/, ''))}</li>`).join('')}
+          </ul>` : `
+          <p style="font-size:14px;color:var(--text-mid);line-height:1.7;">${escHTML(c.summary)}</p>`}
         </div>
       </div>` : ''}
 
@@ -1211,9 +1224,6 @@ async function autoDeploy() {
   if (!v.roleTitle) { showToast('Enter a role title first (Tab 1).', 'error'); return; }
   if (candidates.length === 0) { showToast('No candidates loaded. Pull from Sheet first (Tab 2).', 'error'); return; }
 
-  // Generate the page
-  if (!generatedHTML) generatePreview();
-
   const btn = document.getElementById('deployBtn');
   btn.disabled = true;
   btn.innerHTML = '⏳ Deploying...';
@@ -1252,17 +1262,43 @@ async function autoDeploy() {
       await new Promise(r => setTimeout(r, 2500));
     }
 
-    // 3. Push index.html (check for existing file to get SHA)
-    const content = btoa(unescape(encodeURIComponent(generatedHTML)));
+    // 3. Check for existing file (get SHA + content for multi-batch merge)
     let sha = null;
+    let existingHTML = null;
     try {
       const fileCheck = await fetch(`https://api.github.com/repos/${GH_ORG}/${repo}/contents/index.html`, {
         headers: { 'Authorization': `token ${token}`, 'Accept': 'application/vnd.github.v3+json' }
       });
-      if (fileCheck.ok) { sha = (await fileCheck.json()).sha; }
+      if (fileCheck.ok) {
+        const fileData = await fileCheck.json();
+        sha = fileData.sha;
+        // Decode existing HTML for multi-batch merge
+        if (parseInt(v.batchNumber) > 1) {
+          try { existingHTML = decodeURIComponent(escape(atob(fileData.content.replace(/\n/g, '')))); } catch(e) {}
+        }
+      }
     } catch(e) {}
 
-    const putBody = { message: `${repoExists ? 'Update' : 'Initial'} presentation — Batch ${v.batchNumber} · ${v.roleTitle}`, content };
+    // 4. Generate HTML — merge if multi-batch, otherwise fresh
+    if (existingHTML && parseInt(v.batchNumber) > 1) {
+      showToast(`Merging Batch ${v.batchNumber} into existing page...`, 'loading');
+      generatedHTML = mergeBatchIntoExisting(existingHTML, candidates, v);
+    } else {
+      generatedHTML = buildPresentationHTML();
+    }
+
+    // Update preview
+    const frame = document.getElementById('previewFrame');
+    const iframe = document.createElement('iframe');
+    iframe.style.cssText = 'width:100%;height:100%;border:none;min-height:800px;';
+    iframe.srcdoc = generatedHTML;
+    frame.innerHTML = '';
+    frame.appendChild(iframe);
+    iframe.onload = () => { try { iframe.style.height = iframe.contentDocument.body.scrollHeight + 40 + 'px'; } catch(e) {} };
+
+    // 5. Push index.html
+    const content = btoa(unescape(encodeURIComponent(generatedHTML)));
+    const putBody = { message: `${existingHTML ? 'Add Batch ' + v.batchNumber : repoExists ? 'Update' : 'Initial'} presentation — Batch ${v.batchNumber} · ${v.roleTitle}`, content };
     if (sha) putBody.sha = sha;
 
     const pushResp = await fetch(`https://api.github.com/repos/${GH_ORG}/${repo}/contents/index.html`, {
@@ -1272,7 +1308,7 @@ async function autoDeploy() {
     });
     if (!pushResp.ok) { throw new Error((await pushResp.json()).message || 'Failed to push file'); }
 
-    // 4. Enable GitHub Pages
+    // 6. Enable GitHub Pages
     try {
       await fetch(`https://api.github.com/repos/${GH_ORG}/${repo}/pages`, {
         method: 'POST',
@@ -1282,7 +1318,8 @@ async function autoDeploy() {
     } catch(e) {}
 
     const liveUrl = `https://${GH_ORG}.github.io/${repo}/`;
-    showToast(`Deployed! Your page will be live in ~60 seconds:<br><a href="${liveUrl}" target="_blank" style="color:var(--green);font-weight:700;font-size:14px;">${liveUrl}</a>`, 'success');
+    const batchMsg = existingHTML ? `Batch ${v.batchNumber} merged into existing page!` : 'Deployed!';
+    showToast(`${batchMsg} Your page will be live in ~60 seconds:<br><a href="${liveUrl}" target="_blank" style="color:var(--green);font-weight:700;font-size:14px;">${liveUrl}</a>`, 'success');
 
   } catch(err) {
     showToast('Deploy failed: ' + err.message, 'error');
@@ -1290,6 +1327,208 @@ async function autoDeploy() {
     btn.disabled = false;
     btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"/><path d="M12 12v9"/><path d="m16 16-4-4-4 4"/></svg> Deploy';
   }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// AI-GENERATED RECRUITER NOTES (Claude API)
+// ═══════════════════════════════════════════════════════════════
+async function generateAINotes() {
+  if (candidates.length === 0) {
+    showAIStatus('error', 'No candidates loaded. Pull from Sheet first.');
+    return;
+  }
+
+  const v = getFormValues();
+  if (!v.contextNotes && !v.roleTitle) {
+    showAIStatus('error', 'Fill in Role Title (Tab 1) and Context & Pain Points (Tab 3) first. The AI needs this to write good notes.');
+    return;
+  }
+
+  const btn = document.getElementById('aiNotesBtn');
+  btn.disabled = true;
+  btn.innerHTML = '⏳ Generating...';
+
+  const apiKey = _ak_get();
+  let successCount = 0;
+
+  for (let i = 0; i < candidates.length; i++) {
+    const c = candidates[i];
+    showAIStatus('loading', `Generating notes for ${c.name} (${i + 1}/${candidates.length})...`);
+
+    try {
+      const prompt = `You are a senior recruiter at Sagan's White Glove division writing candidate presentation notes for a client. Write in a direct, confident, human tone. No corporate fluff. Be specific, not generic.
+
+CLIENT CONTEXT:
+- Company: ${v.clientName}
+- Role: ${v.roleTitle}
+- Pain points & needs: ${v.contextNotes || 'Not provided'}
+- Salary range: ${v.salaryRange || 'Not specified'}
+- Schedule: ${v.schedule || 'Full-time, US hours'}
+
+CANDIDATE:
+- Name: ${c.name}
+- Location: ${c.location || 'Not specified'}
+- Experience: ${c.experience || 'Not specified'}
+- Skills: ${c.skills || 'Not specified'}
+- Salary expectation: ${c.salary || 'Not specified'}
+- TAP Certified: ${c.tap ? 'Yes' : 'No'}
+
+Generate exactly TWO sections in JSON format:
+
+1. "why": A "Why [First Name]" section. Write 3-5 bullet points (separated by \\n) explaining why this candidate fits this specific role. Reference their concrete skills, experience, and how they map to the client's pain points and needs. Use the style: specific, measurable, role-relevant. Each bullet should start with a strong lead (skill or achievement first). Do NOT use generic language like "strong profile" or "immediate impact."
+
+2. "note": A "Recruiter's Note" — 2-3 sentences positioning this candidate. Reference their strongest differentiator, how they solve a specific client pain point, and their value at their salary. Write as the recruiter speaking directly to the client. Confident, direct, no fluff.
+
+IMPORTANT: Return ONLY valid JSON. No markdown, no code fences. Format:
+{"why": "bullet 1\\nbullet 2\\nbullet 3", "note": "recruiter note text"}`;
+
+      const resp = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true'
+        },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 600,
+          messages: [{ role: 'user', content: prompt }]
+        })
+      });
+
+      if (!resp.ok) {
+        const errData = await resp.json().catch(() => ({}));
+        throw new Error(errData.error?.message || `API error ${resp.status}`);
+      }
+
+      const data = await resp.json();
+      const text = data.content[0].text.trim();
+
+      // Parse JSON response
+      const parsed = JSON.parse(text);
+      if (parsed.why) c.summary = parsed.why;
+      if (parsed.note) c.recruiterNote = parsed.note;
+      successCount++;
+
+    } catch (err) {
+      console.error(`AI notes failed for ${c.name}:`, err);
+      // Continue to next candidate
+    }
+  }
+
+  updateCandidateList();
+  btn.disabled = false;
+  btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg> Generate AI Notes';
+
+  if (successCount === candidates.length) {
+    showAIStatus('success', `Generated notes for all ${successCount} candidates. Preview to see the result.`);
+  } else if (successCount > 0) {
+    showAIStatus('success', `Generated notes for ${successCount}/${candidates.length} candidates. Some failed. Preview to see results.`);
+  } else {
+    showAIStatus('error', 'Failed to generate notes. Check API key and try again.');
+  }
+}
+
+function showAIStatus(type, msg) {
+  const el = document.getElementById('aiStatus');
+  el.className = 'sheet-status ' + type;
+  el.textContent = msg;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// MULTI-BATCH MERGE (append batch to existing page)
+// ═══════════════════════════════════════════════════════════════
+function mergeBatchIntoExisting(existingHTML, newCandidates, v) {
+  const advisor = ADVISORS[v.advisor];
+  const dateFormatted = new Date(v.batchDate + 'T12:00:00').toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+
+  // Parse existing HTML
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(existingHTML, 'text/html');
+
+  // Find the candidates container
+  const candidatesDiv = doc.querySelector('.candidates');
+  if (!candidatesDiv) {
+    // Can't merge, fall back to fresh generation
+    return buildPresentationHTML();
+  }
+
+  // Count existing candidates for numbering
+  const existingCards = candidatesDiv.querySelectorAll('.card');
+  const startIdx = existingCards.length;
+
+  // Build batch divider HTML
+  const dividerHTML = `
+    <div class="batch-divider" style="display:flex;align-items:center;gap:16px;margin:32px 0 24px;">
+      <div style="flex:1;height:1px;background:#e2e8f0;"></div>
+      <div style="font-size:13px;font-weight:700;color:var(--primary);background:var(--bg-subtle);border:1px solid #e2e8f0;padding:8px 20px;border-radius:100px;white-space:nowrap;">Batch ${v.batchNumber} &middot; ${dateFormatted}</div>
+      <div style="flex:1;height:1px;background:#e2e8f0;"></div>
+    </div>`;
+
+  // Build new candidate cards
+  const newCardsHTML = newCandidates.map((c, i) => generateCandidateCard(c, startIdx + i, v)).join('');
+
+  // Inject divider + new cards into candidates container
+  candidatesDiv.innerHTML += dividerHTML + newCardsHTML;
+
+  // Update hero meta — batch info
+  const batchStrong = doc.querySelector('.hero-meta-item strong');
+  const heroMetaItems = doc.querySelectorAll('.hero-meta-item');
+  heroMetaItems.forEach(item => {
+    const strong = item.querySelector('strong');
+    if (strong && strong.textContent.includes('Batch')) {
+      strong.textContent = `Batches 1-${v.batchNumber}`;
+    }
+    if (strong && !isNaN(strong.textContent)) {
+      // Update candidate count
+      strong.textContent = startIdx + newCandidates.length;
+    }
+  });
+
+  // Update the batch pill
+  const batchPill = doc.querySelector('.batch-pill');
+  if (batchPill) {
+    const batchNum = batchPill.querySelector('.batch-num');
+    if (batchNum) batchNum.textContent = `Batches 1-${v.batchNumber}`;
+  }
+
+  // Rebuild comparison table with ALL candidates (existing + new)
+  // Extract existing candidate data from the comparison table
+  const allCandidates = [];
+
+  // Parse existing comparison table to get old candidate data
+  const compTable = doc.querySelector('.comparison-table');
+  if (compTable) {
+    const ths = compTable.querySelectorAll('thead th');
+    const trs = compTable.querySelectorAll('tbody tr');
+    for (let col = 1; col < ths.length; col++) {
+      allCandidates.push({
+        name: ths[col].textContent,
+        location: trs[0] ? trs[0].querySelectorAll('td')[col]?.textContent || 'TBD' : 'TBD',
+        experience: trs[1] ? trs[1].querySelectorAll('td')[col]?.textContent || 'TBD' : 'TBD',
+        skills: trs[2] ? trs[2].querySelectorAll('td')[col]?.textContent || 'TBD' : 'TBD',
+        salary: trs[3] ? trs[3].querySelectorAll('td')[col]?.textContent || 'TBD' : 'TBD',
+        tap: trs[4] ? (trs[4].querySelectorAll('td')[col]?.textContent || '').includes('Yes') : false,
+        videoLink: trs[5] ? (trs[5].querySelectorAll('td')[col]?.textContent || '').includes('Available') ? 'yes' : '' : '',
+        resumeLink: trs[6] ? (trs[6].querySelectorAll('td')[col]?.textContent || '').includes('Available') ? 'yes' : '' : ''
+      });
+    }
+  }
+
+  // Add new candidates
+  newCandidates.forEach(c => allCandidates.push(c));
+
+  // Replace comparison section
+  const compSection = doc.querySelector('.comparison-section');
+  if (compSection) {
+    const newTable = generateComparisonTable(allCandidates, v);
+    const tempDiv = parser.parseFromString(newTable, 'text/html').body.firstElementChild;
+    if (tempDiv) compSection.replaceWith(tempDiv);
+  }
+
+  // Return the merged HTML
+  return '<!DOCTYPE html>\n' + doc.documentElement.outerHTML;
 }
 
 // ═══════════════════════════════════════════════════════════════
