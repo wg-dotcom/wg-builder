@@ -402,6 +402,52 @@ let generatedHTML = '';
 const _ak = [115,107,45,97,110,116,45,97,112,105,48,51,45,113,72,72,80,109,57,89,72,118,100,56,79,114,100,76,99,52,65,78,75,111,54,109,70,109,70,77,88,53,98,55,78,69,56,54,76,80,67,68,120,66,83,71,115,90,67,114,54,117,72,83,88,82,104,45,114,102,111,69,57,111,54,113,99,104,76,106,95,54,118,97,78,72,109,80,70,106,98,71,108,98,102,48,118,73,119,45,95,111,102,49,54,65,65,65];
 function _ak_get() { return _ak.map(c => String.fromCharCode(c)).join(''); }
 
+// Gemini API key (obfuscated)
+const _gk = [65,73,122,97,83,121,65,103,97,110,74,73,56,89,115,80,102,89,98,120,114,81,119,110,81,74,95,75,84,110,68,97,109,49,74,109,105,110,69];
+function _gk_get() { return _gk.map(c => String.fromCharCode(c)).join(''); }
+
+// Unified AI call: tries Anthropic first, falls back to Gemini
+async function callAI(prompt, maxTokens = 200) {
+  // Try Anthropic first
+  try {
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': _ak_get(),
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: maxTokens,
+        messages: [{ role: 'user', content: prompt }]
+      })
+    });
+    const data = await resp.json();
+    if (resp.ok && data.content && data.content[0]) return data.content[0].text.trim();
+    // Non-billing error — still fall through to Gemini
+    console.log('Anthropic failed, falling back to Gemini:', data.error?.message || resp.status);
+  } catch(e) {
+    // Anthropic failed, try Gemini
+  }
+
+  // Fallback: Gemini
+  const gemResp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${_gk_get()}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents: [{ parts: [{ text: prompt }] }],
+      generationConfig: { maxOutputTokens: maxTokens, temperature: 0.3 }
+    })
+  });
+  if (!gemResp.ok) throw new Error('Both AI providers failed');
+  const gemData = await gemResp.json();
+  const text = gemData.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+  if (!text) throw new Error('Empty Gemini response');
+  return text;
+}
+
 const ADVISORS = {
   jesus: {
     name: 'Jesus Pacheco',
@@ -515,27 +561,9 @@ RULES:
 Return ONLY valid JSON, no markdown fences:
 {"primary": "#XXXXXX", "dark": "#XXXXXX", "highlight": "#XXXXXX", "fontHeading": "Font Name", "fontBody": "Font Name", "logoUrl": "https://..."}`;
 
-    const resp = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': _ak_get(),
-        'anthropic-version': '2023-06-01',
-        'anthropic-dangerous-direct-browser-access': 'true'
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 200,
-        messages: [{ role: 'user', content: brandPrompt }]
-      })
-    });
-
-    if (resp.ok) {
-      const data = await resp.json();
-      let json = data.content[0].text.trim();
-      if (json.startsWith('```')) json = json.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
-      aiResult = JSON.parse(json);
-    }
+    let json = await callAI(brandPrompt, 200);
+    if (json.startsWith('```')) json = json.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
+    aiResult = JSON.parse(json);
   } catch(e) {
     console.error('AI brand detection failed:', e);
   }
@@ -1368,7 +1396,6 @@ async function generateAINotes() {
   btn.disabled = true;
   btn.innerHTML = '⏳ Generating...';
 
-  const apiKey = _ak_get();
   let successCount = 0;
 
   // Fetch client website content for richer context and to mirror their language
@@ -1449,28 +1476,7 @@ GENERATE TWO SECTIONS as JSON:
 Return ONLY valid JSON. No markdown, no code fences.
 {"why": "bullet 1\\nbullet 2\\nbullet 3", "note": "the note"}`;
 
-      const resp = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': apiKey,
-          'anthropic-version': '2023-06-01',
-          'anthropic-dangerous-direct-browser-access': 'true'
-        },
-        body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
-          max_tokens: 700,
-          messages: [{ role: 'user', content: prompt }]
-        })
-      });
-
-      if (!resp.ok) {
-        const errData = await resp.json().catch(() => ({}));
-        throw new Error(errData.error?.message || `API error ${resp.status}`);
-      }
-
-      const data = await resp.json();
-      const text = data.content[0].text.trim();
+      const text = await callAI(prompt, 700);
 
       // Parse JSON — handle possible markdown wrapping
       let jsonStr = text;
