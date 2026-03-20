@@ -425,12 +425,13 @@ function _gk_get() { return _gk.map(c => String.fromCharCode(c)).join(''); }
 const _qk = [103,115,107,95,110,85,117,114,105,50,89,69,102,49,97,120,74,79,112,90,89,105,114,72,87,71,100,121,98,51,70,89,85,101,122,98,56,97,87,82,70,104,103,51,55,79,55,113,86,89,87,115,108,57,86,121];
 function _qk_get() { return _qk.map(c => String.fromCharCode(c)).join(''); }
 
-// Unified AI call: tries Anthropic → Groq → Gemini
+// Unified AI call: tries Anthropic → Groq → Gemini (with timeouts)
 async function callAI(prompt, maxTokens = 200) {
-  // Try Anthropic first
+  // Try Anthropic first (10s timeout)
   try {
     const resp = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
+      signal: AbortSignal.timeout(10000),
       headers: {
         'Content-Type': 'application/json',
         'x-api-key': _ak_get(),
@@ -446,12 +447,13 @@ async function callAI(prompt, maxTokens = 200) {
     const data = await resp.json();
     if (resp.ok && data.content && data.content[0]) return data.content[0].text.trim();
     console.log('Anthropic failed, trying Groq:', data.error?.message || resp.status);
-  } catch(e) {}
+  } catch(e) { console.log('Anthropic timeout/error, trying Groq'); }
 
-  // Fallback 1: Groq (Llama 3.3 70B)
+  // Fallback 1: Groq (15s timeout)
   try {
     const resp = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
+      signal: AbortSignal.timeout(15000),
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${_qk_get()}`
@@ -466,12 +468,13 @@ async function callAI(prompt, maxTokens = 200) {
     const data = await resp.json();
     if (resp.ok && data.choices?.[0]?.message?.content) return data.choices[0].message.content.trim();
     console.log('Groq failed, trying Gemini:', data.error?.message || resp.status);
-  } catch(e) {}
+  } catch(e) { console.log('Groq timeout/error, trying Gemini'); }
 
-  // Fallback 2: Gemini
+  // Fallback 2: Gemini (10s timeout)
   try {
     const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${_gk_get()}`, {
       method: 'POST',
+      signal: AbortSignal.timeout(10000),
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         contents: [{ parts: [{ text: prompt }] }],
@@ -480,7 +483,7 @@ async function callAI(prompt, maxTokens = 200) {
     });
     const data = await resp.json();
     if (resp.ok && data.candidates?.[0]?.content?.parts?.[0]?.text) return data.candidates[0].content.parts[0].text.trim();
-  } catch(e) {}
+  } catch(e) { console.log('Gemini timeout/error'); }
 
   throw new Error('All AI providers failed. Check API credits.');
 }
@@ -569,6 +572,11 @@ async function extractBranding() {
   if (!url) { showBrandStatus('error', 'Enter a client website URL first.'); return; }
 
   showBrandStatus('loading', 'Scanning website for brand colors, fonts, and logo...');
+
+  // Global timeout: if the whole process takes >30s, bail out with whatever we have
+  const brandingTimeout = setTimeout(() => {
+    showBrandStatus('error', 'Detection timed out. Enter colors, fonts, and logo manually.');
+  }, 30000);
 
   let logo = '';
   let detectedColors = { primary: '', dark: '', highlight: '' };
@@ -839,6 +847,8 @@ Return ONLY valid JSON: {"primary":"#XXXXXX","dark":"#XXXXXX","highlight":"#XXXX
   if (detectedFonts.body) {
     document.getElementById('fontBody').value = detectedFonts.body;
   }
+
+  clearTimeout(brandingTimeout);
 
   if (found.length > 0) {
     const via = method === 'ai' ? 'AI + site scan' : method === 'css' ? 'site scan' : 'partial';
