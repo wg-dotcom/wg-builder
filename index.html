@@ -434,6 +434,27 @@ function syncColor(id, val) {
 // ═══════════════════════════════════════════════════════════════
 // AUTO-EXTRACT BRANDING FROM CLIENT WEBSITE
 // ═══════════════════════════════════════════════════════════════
+async function fetchWithProxy(url) {
+  // Try multiple CORS proxies with fallbacks
+  const proxies = [
+    u => `https://api.codetabs.com/v1/proxy/?quest=${encodeURIComponent(u)}`,
+    u => `https://corsproxy.org/?${encodeURIComponent(u)}`,
+    u => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
+  ];
+  for (const proxy of proxies) {
+    try {
+      const resp = await fetch(proxy(url), { signal: AbortSignal.timeout(8000) });
+      if (resp.ok) { return await resp.text(); }
+    } catch(e) { continue; }
+  }
+  // Last resort: direct fetch (works if target allows CORS)
+  try {
+    const resp = await fetch(url, { signal: AbortSignal.timeout(8000) });
+    if (resp.ok) return await resp.text();
+  } catch(e) {}
+  throw new Error('All fetch methods failed. Try entering colors manually.');
+}
+
 async function extractBranding() {
   const url = document.getElementById('clientUrl').value.trim();
   if (!url) { showBrandStatus('error', 'Enter a client website URL first.'); return; }
@@ -441,11 +462,7 @@ async function extractBranding() {
   showBrandStatus('loading', 'Scanning website for brand colors and logo...');
 
   try {
-    // Use a CORS proxy to fetch the client's website
-    const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
-    const resp = await fetch(proxyUrl);
-    if (!resp.ok) throw new Error('Could not fetch website.');
-    const html = await resp.text();
+    const html = await fetchWithProxy(url);
 
     // Parse the HTML
     const parser = new DOMParser();
@@ -602,6 +619,42 @@ document.getElementById('batchDate').value = new Date().toISOString().split('T')
 // ═══════════════════════════════════════════════════════════════
 // GOOGLE SHEETS PULL
 // ═══════════════════════════════════════════════════════════════
+function fetchSheetViaJSONP(sheetId) {
+  return new Promise((resolve, reject) => {
+    const callbackName = 'sheetCallback_' + Date.now();
+    const timeout = setTimeout(() => {
+      delete window[callbackName];
+      script.remove();
+      reject(new Error('Sheet request timed out'));
+    }, 10000);
+
+    window[callbackName] = function(response) {
+      clearTimeout(timeout);
+      delete window[callbackName];
+      script.remove();
+      try {
+        if (!response || !response.table) { reject(new Error('Empty response')); return; }
+        const table = response.table;
+        const headers = table.cols.map(c => c.label || '');
+        const rows = [headers];
+        table.rows.forEach(r => {
+          rows.push(r.c.map(cell => cell ? (cell.v !== null && cell.v !== undefined ? String(cell.v) : '') : ''));
+        });
+        resolve(rows);
+      } catch(e) { reject(e); }
+    };
+
+    const script = document.createElement('script');
+    script.src = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:json;responseHandler=${callbackName}`;
+    script.onerror = () => {
+      clearTimeout(timeout);
+      delete window[callbackName];
+      reject(new Error('Failed to load sheet'));
+    };
+    document.body.appendChild(script);
+  });
+}
+
 async function pullFromSheet() {
   const statusEl = document.getElementById('sheetStatus');
   const url = document.getElementById('sheetUrl').value.trim();
@@ -617,14 +670,20 @@ async function pullFromSheet() {
   showStatus('loading', 'Pulling candidates from Google Sheet...');
 
   try {
-    // Use the public CSV export (sheet must be shared with "Anyone with the link")
-    const csvUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv`;
-    const response = await fetch(csvUrl);
-
-    if (!response.ok) throw new Error('Could not fetch sheet. Make sure it is shared publicly.');
-
-    const csvText = await response.text();
-    const rows = parseCSV(csvText);
+    // Use Google Visualization API with JSONP (bypasses CORS)
+    let rows;
+    try {
+      rows = await fetchSheetViaJSONP(sheetId);
+    } catch(e1) {
+      // Fallback: try CSV via CORS proxy
+      try {
+        const csvUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv`;
+        const csvText = await fetchWithProxy(csvUrl);
+        rows = parseCSV(csvText);
+      } catch(e2) {
+        throw new Error('Could not fetch sheet. Make sure it is shared: open the sheet → Share → "Anyone with the link" → Viewer. Then try again.');
+      }
+    }
 
     if (rows.length < 2) { showStatus('error', 'Sheet appears empty.'); return; }
 
