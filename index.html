@@ -308,19 +308,8 @@
             <label>Google Sheet URL</label>
             <input type="url" id="sheetUrl" value="https://docs.google.com/spreadsheets/d/1jfja4wRpk4hyvdGq4HxU-D-7i6FDnUc_dBM4s0Fho0Q/edit" />
           </div>
-          <div class="form-group">
-            <label>Filter: Company Name contains</label>
-            <input type="text" id="filterCompany" placeholder="e.g. Wingz" />
-          </div>
-          <div class="form-row">
-            <div class="form-group">
-              <label>Filter: Batch Number</label>
-              <input type="text" id="filterBatch" placeholder="e.g. 1" />
-            </div>
-            <div class="form-group">
-              <label>Filter: Title / Role</label>
-              <input type="text" id="filterTitle" placeholder="e.g. Operations Team Lead" />
-            </div>
+          <div id="filterPreview" style="font-size:12px;color:var(--text-dim);padding:8px 12px;background:var(--bg);border-radius:8px;margin-bottom:12px;">
+            Filters from Client tab: <strong id="filterPreviewText">fill in Tab 1 first</strong>
           </div>
           <button class="btn btn-accent" onclick="pullFromSheet()" style="width:100%; justify-content: center;">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9"/></svg>
@@ -625,6 +614,21 @@ function showBrandStatus(type, msg) {
 document.getElementById('batchDate').value = new Date().toISOString().split('T')[0];
 
 // ═══════════════════════════════════════════════════════════════
+// LIVE FILTER PREVIEW (updates when Tab 1 fields change)
+// ═══════════════════════════════════════════════════════════════
+['clientName', 'batchNumber', 'roleTitle'].forEach(id => {
+  document.getElementById(id).addEventListener('input', updateFilterPreview);
+});
+function updateFilterPreview() {
+  const c = document.getElementById('clientName').value.trim();
+  const b = document.getElementById('batchNumber').value.trim();
+  const r = document.getElementById('roleTitle').value.trim();
+  const parts = [c && `"${c}"`, b && `Batch ${b}`, r && `"${r}"`].filter(Boolean);
+  const el = document.getElementById('filterPreviewText');
+  if (el) el.innerHTML = parts.length ? parts.join(' · ') : 'fill in Tab 1 first';
+}
+
+// ═══════════════════════════════════════════════════════════════
 // GOOGLE SHEETS PULL
 // ═══════════════════════════════════════════════════════════════
 function fetchSheetViaJSONP(sheetId) {
@@ -666,9 +670,14 @@ function fetchSheetViaJSONP(sheetId) {
 async function pullFromSheet() {
   const statusEl = document.getElementById('sheetStatus');
   const url = document.getElementById('sheetUrl').value.trim();
-  const filterCompany = document.getElementById('filterCompany').value.trim().toLowerCase();
-  const filterBatch = document.getElementById('filterBatch').value.trim().toLowerCase();
-  const filterTitle = document.getElementById('filterTitle').value.trim().toLowerCase();
+  // Pull filters from Tab 1 (Client info) — no duplicate inputs needed
+  const filterCompany = document.getElementById('clientName').value.trim().toLowerCase();
+  const filterBatch = document.getElementById('batchNumber').value.trim().toLowerCase();
+  const filterTitle = document.getElementById('roleTitle').value.trim().toLowerCase();
+
+  // Update the filter preview text
+  const parts = [filterCompany && `"${filterCompany}"`, filterBatch && `Batch ${filterBatch}`, filterTitle && `"${filterTitle}"`].filter(Boolean);
+  document.getElementById('filterPreviewText').innerHTML = parts.length ? parts.join(' · ') : 'fill in Tab 1 first';
 
   if (!url) { showStatus('error', 'Please enter a Google Sheet URL.'); return; }
 
