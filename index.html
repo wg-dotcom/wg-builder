@@ -531,8 +531,9 @@ async function fetchWithProxy(url) {
 }
 
 async function extractBranding() {
-  const url = document.getElementById('clientUrl').value.trim();
+  let url = document.getElementById('clientUrl').value.trim();
   if (!url) { showBrandStatus('error', 'Enter a client website URL first.'); return; }
+  if (!/^https?:\/\//i.test(url)) { url = 'https://' + url; document.getElementById('clientUrl').value = url; }
 
   showBrandStatus('loading', 'Detecting brand identity...');
 
