@@ -432,23 +432,33 @@ function syncColor(id, val) {
 // AUTO-EXTRACT BRANDING FROM CLIENT WEBSITE
 // ═══════════════════════════════════════════════════════════════
 async function fetchWithProxy(url) {
-  // Try multiple CORS proxies with fallbacks
-  const proxies = [
-    u => `https://api.codetabs.com/v1/proxy/?quest=${encodeURIComponent(u)}`,
-    u => `https://corsproxy.org/?${encodeURIComponent(u)}`,
-    u => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
-  ];
-  for (const proxy of proxies) {
-    try {
-      const resp = await fetch(proxy(url), { signal: AbortSignal.timeout(8000) });
-      if (resp.ok) { return await resp.text(); }
-    } catch(e) { continue; }
-  }
+  // Strategy 1: allorigins.win /get endpoint (returns JSON with contents field)
+  try {
+    const resp = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(url)}`, { signal: AbortSignal.timeout(8000) });
+    if (resp.ok) {
+      const data = await resp.json();
+      if (data.contents) return data.contents;
+    }
+  } catch(e) {}
+
+  // Strategy 2: corsproxy.io (different from the dead corsproxy.org)
+  try {
+    const resp = await fetch(`https://corsproxy.io/?url=${encodeURIComponent(url)}`, { signal: AbortSignal.timeout(8000) });
+    if (resp.ok) return await resp.text();
+  } catch(e) {}
+
+  // Strategy 3: codetabs (intermittent)
+  try {
+    const resp = await fetch(`https://api.codetabs.com/v1/proxy/?quest=${encodeURIComponent(url)}`, { signal: AbortSignal.timeout(8000) });
+    if (resp.ok) return await resp.text();
+  } catch(e) {}
+
   // Last resort: direct fetch (works if target allows CORS)
   try {
     const resp = await fetch(url, { signal: AbortSignal.timeout(8000) });
     if (resp.ok) return await resp.text();
   } catch(e) {}
+
   throw new Error('All fetch methods failed. Try entering colors manually.');
 }
 
