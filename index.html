@@ -406,7 +406,11 @@ function _ak_get() { return _ak.map(c => String.fromCharCode(c)).join(''); }
 const _gk = [65,73,122,97,83,121,65,103,97,110,74,73,56,89,115,80,102,89,98,120,114,81,119,110,81,74,95,75,84,110,68,97,109,49,74,109,105,110,69];
 function _gk_get() { return _gk.map(c => String.fromCharCode(c)).join(''); }
 
-// Unified AI call: tries Anthropic first, falls back to Gemini
+// Groq API key (obfuscated)
+const _qk = [103,115,107,95,110,85,117,114,105,50,89,69,102,49,97,120,74,79,112,90,89,105,114,72,87,71,100,121,98,51,70,89,85,101,122,98,56,97,87,82,70,104,103,51,55,79,55,113,86,89,87,115,108,57,86,121];
+function _qk_get() { return _qk.map(c => String.fromCharCode(c)).join(''); }
+
+// Unified AI call: tries Anthropic → Groq → Gemini
 async function callAI(prompt, maxTokens = 200) {
   // Try Anthropic first
   try {
@@ -426,26 +430,44 @@ async function callAI(prompt, maxTokens = 200) {
     });
     const data = await resp.json();
     if (resp.ok && data.content && data.content[0]) return data.content[0].text.trim();
-    // Non-billing error — still fall through to Gemini
-    console.log('Anthropic failed, falling back to Gemini:', data.error?.message || resp.status);
-  } catch(e) {
-    // Anthropic failed, try Gemini
-  }
+    console.log('Anthropic failed, trying Groq:', data.error?.message || resp.status);
+  } catch(e) {}
 
-  // Fallback: Gemini
-  const gemResp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${_gk_get()}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: { maxOutputTokens: maxTokens, temperature: 0.3 }
-    })
-  });
-  if (!gemResp.ok) throw new Error('Both AI providers failed');
-  const gemData = await gemResp.json();
-  const text = gemData.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-  if (!text) throw new Error('Empty Gemini response');
-  return text;
+  // Fallback 1: Groq (Llama 3.3 70B)
+  try {
+    const resp = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${_qk_get()}`
+      },
+      body: JSON.stringify({
+        model: 'llama-3.3-70b-versatile',
+        max_tokens: maxTokens,
+        temperature: 0.3,
+        messages: [{ role: 'user', content: prompt }]
+      })
+    });
+    const data = await resp.json();
+    if (resp.ok && data.choices?.[0]?.message?.content) return data.choices[0].message.content.trim();
+    console.log('Groq failed, trying Gemini:', data.error?.message || resp.status);
+  } catch(e) {}
+
+  // Fallback 2: Gemini
+  try {
+    const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${_gk_get()}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { maxOutputTokens: maxTokens, temperature: 0.3 }
+      })
+    });
+    const data = await resp.json();
+    if (resp.ok && data.candidates?.[0]?.content?.parts?.[0]?.text) return data.candidates[0].content.parts[0].text.trim();
+  } catch(e) {}
+
+  throw new Error('All AI providers failed. Check API credits.');
 }
 
 const ADVISORS = {
