@@ -523,86 +523,133 @@ async function extractBranding() {
 
     if (logo) document.getElementById('logoUrl').value = logo;
 
-    // --- EXTRACT COLORS ---
-    const colors = [];
-
-    // 1. Check theme-color meta tag
-    const themeColor = doc.querySelector('meta[name="theme-color"]');
-    if (themeColor) colors.push(themeColor.getAttribute('content'));
-
-    // 2. Check msapplication-TileColor
-    const tileColor = doc.querySelector('meta[name="msapplication-TileColor"]');
-    if (tileColor) colors.push(tileColor.getAttribute('content'));
-
-    // 3. Parse inline CSS for color values
+    // --- EXTRACT COLORS VIA CLAUDE AI ---
+    // Gather all color signals from the page for Claude to analyze
     const styleEls = doc.querySelectorAll('style');
     const cssText = Array.from(styleEls).map(s => s.textContent).join(' ');
 
-    // Extract CSS custom properties (--primary, --accent, --brand, etc.)
-    const varMatches = cssText.match(/--(?:primary|accent|brand|main|color-primary|color-accent|theme)[^:]*:\s*(#[0-9a-fA-F]{3,8})/gi);
-    if (varMatches) {
-      varMatches.forEach(m => {
-        const hex = m.match(/#[0-9a-fA-F]{3,8}/);
-        if (hex) colors.push(hex[0]);
-      });
-    }
+    // Collect raw signals
+    const themeColor = doc.querySelector('meta[name="theme-color"]')?.getAttribute('content') || '';
+    const tileColor = doc.querySelector('meta[name="msapplication-TileColor"]')?.getAttribute('content') || '';
 
-    // Extract all hex colors from CSS
-    const hexMatches = cssText.match(/#[0-9a-fA-F]{6}/g);
-    if (hexMatches) {
-      // Count frequency - most used colors are likely brand colors
-      const freq = {};
-      hexMatches.forEach(h => {
-        const lower = h.toLowerCase();
-        // Skip near-black, near-white, and grays
-        if (lower === '#000000' || lower === '#ffffff' || lower === '#333333' || lower === '#666666' || lower === '#999999' || lower === '#cccccc' || lower === '#f5f5f5' || lower === '#eeeeee' || lower === '#dddddd') return;
-        freq[lower] = (freq[lower] || 0) + 1;
-      });
+    // CSS custom properties
+    const cssVars = cssText.match(/--[a-zA-Z-]+:\s*#[0-9a-fA-F]{3,8}/gi) || [];
 
-      const sorted = Object.entries(freq).sort((a, b) => b[1] - a[1]);
-      sorted.slice(0, 5).forEach(([color]) => colors.push(color));
-    }
+    // All hex colors with frequency
+    const allHex = cssText.match(/#[0-9a-fA-F]{6}/g) || [];
+    const hexFreq = {};
+    allHex.forEach(h => { const l = h.toLowerCase(); hexFreq[l] = (hexFreq[l] || 0) + 1; });
+    const topHex = Object.entries(hexFreq).sort((a,b) => b[1] - a[1]).slice(0, 20).map(([c, n]) => `${c} (${n}x)`).join(', ');
 
-    // Also check inline style on body, header, nav elements
-    const brandEls = doc.querySelectorAll('header, nav, .header, .navbar, [class*="hero"]');
-    brandEls.forEach(el => {
-      const bg = el.getAttribute('style');
-      if (bg) {
-        const bgColor = bg.match(/background(?:-color)?:\s*(#[0-9a-fA-F]{3,8})/i);
-        if (bgColor) colors.push(bgColor[1]);
-      }
+    // RGB/HSL colors from CSS
+    const rgbColors = cssText.match(/rgba?\([^)]+\)/gi)?.slice(0, 10)?.join(', ') || '';
+
+    // Inline styles on key elements
+    const inlineColors = [];
+    doc.querySelectorAll('header, nav, .header, .navbar, [class*="hero"], [class*="banner"], button, a').forEach(el => {
+      const style = el.getAttribute('style') || '';
+      const cls = el.getAttribute('class') || '';
+      const colorMatch = style.match(/(background(?:-color)?|color|border-color):\s*(#[0-9a-fA-F]{3,8}|rgba?\([^)]+\))/gi);
+      if (colorMatch) inlineColors.push(...colorMatch);
     });
 
-    // Deduplicate and assign
-    const uniqueColors = [...new Set(colors.map(c => c ? c.toLowerCase() : '').filter(c => c && c.startsWith('#')))];
+    // Page headings and company name for context
+    const pageTitle = doc.querySelector('title')?.textContent || '';
+    const h1Text = doc.querySelector('h1')?.textContent || '';
 
-    if (uniqueColors.length > 0) {
-      // First color = primary
-      document.getElementById('colorPrimaryHex').value = uniqueColors[0];
-      document.getElementById('colorPrimary').value = uniqueColors[0].length === 7 ? uniqueColors[0] : uniqueColors[0];
+    showBrandStatus('loading', 'Using AI to identify exact brand colors...');
 
-      // Find a dark color for header
-      const darkColor = uniqueColors.find(c => {
-        const rgb = hexToRGB(c);
-        return (rgb.r + rgb.g + rgb.b) / 3 < 80;
+    try {
+      const colorPrompt = `You are a brand designer analyzing a website to extract the exact brand colors. Be precise. I need 3 hex colors.
+
+WEBSITE: ${url}
+Page title: ${pageTitle}
+H1: ${h1Text}
+
+COLOR SIGNALS FROM THE PAGE:
+- theme-color meta: ${themeColor || 'none'}
+- tile-color meta: ${tileColor || 'none'}
+- CSS custom properties: ${cssVars.slice(0, 15).join('; ') || 'none'}
+- Most frequent hex colors in CSS: ${topHex || 'none'}
+- RGB colors found: ${rgbColors || 'none'}
+- Inline styles on header/nav/buttons: ${inlineColors.slice(0, 10).join('; ') || 'none'}
+
+YOUR JOB: Identify the 3 brand colors:
+1. PRIMARY: The main brand/accent color. Usually the most distinctive, saturated color used on buttons, links, headers, or the logo area. NOT a gray, NOT black, NOT white. This is the color that screams "this is our brand."
+2. DARK: The dark background color used in the header/navbar/footer. Usually a very dark shade (navy, charcoal, dark version of the brand color). If the site uses a white header, pick a dark shade derived from the primary.
+3. HIGHLIGHT: A secondary accent or bright color used for hover states, CTAs, badges, or decorative elements. Should contrast well with the dark color. If there's no clear secondary, pick a lighter/brighter variant of the primary.
+
+RULES:
+- All values must be 6-digit hex (#RRGGBB format)
+- Do NOT pick grays (#333, #666, #999, #6b7280, #374151, #9ca3af, etc.) as primary or highlight
+- Do NOT pick pure black (#000000) or white (#ffffff)
+- The primary should be a real brand color with saturation, not a neutral
+- If the CSS variables have something like --primary or --brand or --accent, that's almost certainly the primary
+- Look at button backgrounds and link colors for the primary
+- Look at header/footer backgrounds for the dark color
+
+Return ONLY valid JSON, no explanation:
+{"primary": "#XXXXXX", "dark": "#XXXXXX", "highlight": "#XXXXXX"}`;
+
+      const colorResp = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': _ak_get(),
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true'
+        },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 150,
+          messages: [{ role: 'user', content: colorPrompt }]
+        })
       });
-      if (darkColor) {
-        document.getElementById('colorDarkHex').value = darkColor;
-        document.getElementById('colorDark').value = darkColor;
-      } else if (uniqueColors[0]) {
-        const dark = darken(uniqueColors[0], 40);
-        document.getElementById('colorDarkHex').value = dark;
-        document.getElementById('colorDark').value = dark;
+
+      if (colorResp.ok) {
+        const colorData = await colorResp.json();
+        let colorJson = colorData.content[0].text.trim();
+        if (colorJson.startsWith('```')) colorJson = colorJson.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
+        const brandColors = JSON.parse(colorJson);
+
+        if (brandColors.primary && /^#[0-9a-fA-F]{6}$/.test(brandColors.primary)) {
+          document.getElementById('colorPrimaryHex').value = brandColors.primary;
+          document.getElementById('colorPrimary').value = brandColors.primary;
+        }
+        if (brandColors.dark && /^#[0-9a-fA-F]{6}$/.test(brandColors.dark)) {
+          document.getElementById('colorDarkHex').value = brandColors.dark;
+          document.getElementById('colorDark').value = brandColors.dark;
+        }
+        if (brandColors.highlight && /^#[0-9a-fA-F]{6}$/.test(brandColors.highlight)) {
+          document.getElementById('colorHighlightHex').value = brandColors.highlight;
+          document.getElementById('colorHighlight').value = brandColors.highlight;
+        }
       }
+    } catch(colorErr) {
+      // AI color extraction failed, fall back to basic heuristics
+      console.error('AI color extraction failed:', colorErr);
+      const fallbackColors = [];
+      if (themeColor) fallbackColors.push(themeColor);
+      if (tileColor) fallbackColors.push(tileColor);
+      const basicHex = Object.entries(hexFreq)
+        .filter(([c]) => {
+          const rgb = hexToRGB(c);
+          const avg = (rgb.r + rgb.g + rgb.b) / 3;
+          const saturation = Math.max(rgb.r, rgb.g, rgb.b) - Math.min(rgb.r, rgb.g, rgb.b);
+          return avg > 30 && avg < 220 && saturation > 30; // Skip grays, near-black, near-white
+        })
+        .sort((a,b) => b[1] - a[1])
+        .slice(0, 3)
+        .map(([c]) => c);
+      fallbackColors.push(...basicHex);
 
-      // Find a light/bright color for highlights
-      const brightColor = uniqueColors.find(c => {
-        const rgb = hexToRGB(c);
-        return (rgb.r + rgb.g + rgb.b) / 3 > 150 && c !== uniqueColors[0];
-      });
-      if (brightColor) {
-        document.getElementById('colorHighlightHex').value = brightColor;
-        document.getElementById('colorHighlight').value = brightColor;
+      if (fallbackColors.length > 0) {
+        document.getElementById('colorPrimaryHex').value = fallbackColors[0];
+        document.getElementById('colorPrimary').value = fallbackColors[0];
+        if (fallbackColors[1]) {
+          document.getElementById('colorDarkHex').value = fallbackColors[1];
+          document.getElementById('colorDark').value = fallbackColors[1];
+        }
       }
     }
 
