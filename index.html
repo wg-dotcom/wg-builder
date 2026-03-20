@@ -460,13 +460,13 @@ async function fetchWithProxy(url) {
     }
   } catch(e) {}
 
-  // Strategy 2: corsproxy.io (different from the dead corsproxy.org)
+  // Strategy 2: corsproxy.io
   try {
     const resp = await fetch(`https://corsproxy.io/?url=${encodeURIComponent(url)}`, { signal: AbortSignal.timeout(8000) });
     if (resp.ok) return await resp.text();
   } catch(e) {}
 
-  // Strategy 3: codetabs (intermittent)
+  // Strategy 3: codetabs
   try {
     const resp = await fetch(`https://api.codetabs.com/v1/proxy/?quest=${encodeURIComponent(url)}`, { signal: AbortSignal.timeout(8000) });
     if (resp.ok) return await resp.text();
@@ -478,264 +478,163 @@ async function fetchWithProxy(url) {
     if (resp.ok) return await resp.text();
   } catch(e) {}
 
-  throw new Error('All fetch methods failed. Try entering colors manually.');
+  return null; // Return null instead of throwing — callers handle gracefully
 }
 
 async function extractBranding() {
   const url = document.getElementById('clientUrl').value.trim();
   if (!url) { showBrandStatus('error', 'Enter a client website URL first.'); return; }
 
-  showBrandStatus('loading', 'Scanning website for brand colors and logo...');
+  showBrandStatus('loading', 'Detecting brand colors and fonts...');
 
+  // ─── TRACK 1: AI-POWERED (always runs, no CORS needed) ───
+  // Claude knows most company websites from training data.
+  // We ask it directly for brand colors, fonts, and logo URL.
+  let aiResult = null;
   try {
-    const html = await fetchWithProxy(url);
+    const brandPrompt = `You are a brand identity expert. Given a company website URL, identify their exact brand colors, typography, and logo.
 
-    // Parse the HTML
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(html, 'text/html');
+WEBSITE URL: ${url}
 
-    // --- EXTRACT LOGO ---
-    let logo = '';
-    // Try: og:image, apple-touch-icon, link[rel*=icon], img with "logo" in src/class/alt
-    const ogImage = doc.querySelector('meta[property="og:image"]');
-    if (ogImage) logo = ogImage.getAttribute('content');
+Based on your knowledge of this website (or the company/brand behind it), provide:
 
-    if (!logo) {
-      const touchIcon = doc.querySelector('link[rel="apple-touch-icon"]');
-      if (touchIcon) logo = touchIcon.getAttribute('href');
-    }
-
-    if (!logo) {
-      // Look for img tags with "logo" in their attributes
-      const imgs = doc.querySelectorAll('img');
-      for (const img of imgs) {
-        const src = (img.getAttribute('src') || '').toLowerCase();
-        const alt = (img.getAttribute('alt') || '').toLowerCase();
-        const cls = (img.getAttribute('class') || '').toLowerCase();
-        if (src.includes('logo') || alt.includes('logo') || cls.includes('logo')) {
-          logo = img.getAttribute('src');
-          break;
-        }
-      }
-    }
-
-    if (!logo) {
-      const favicon = doc.querySelector('link[rel="icon"], link[rel="shortcut icon"]');
-      if (favicon) logo = favicon.getAttribute('href');
-    }
-
-    // Resolve relative URLs
-    if (logo && !logo.startsWith('http')) {
-      try {
-        logo = new URL(logo, url).href;
-      } catch(e) {}
-    }
-
-    if (logo) document.getElementById('logoUrl').value = logo;
-
-    // --- EXTRACT COLORS + FONTS VIA CLAUDE AI ---
-    showBrandStatus('loading', 'Analyzing website styles...');
-
-    // 1. Inline <style> tags
-    const styleEls = doc.querySelectorAll('style');
-    let cssText = Array.from(styleEls).map(s => s.textContent).join(' ');
-
-    // 2. Also try to fetch external stylesheets (many sites use <link> not <style>)
-    const cssLinks = Array.from(doc.querySelectorAll('link[rel="stylesheet"]'))
-      .map(l => l.getAttribute('href'))
-      .filter(h => h && !h.includes('fonts.googleapis.com') && !h.includes('font-awesome'));
-
-    // Resolve relative URLs and fetch up to 3 external stylesheets
-    for (const cssHref of cssLinks.slice(0, 3)) {
-      try {
-        let fullUrl = cssHref;
-        if (!fullUrl.startsWith('http')) {
-          try { fullUrl = new URL(cssHref, url).href; } catch(e) { continue; }
-        }
-        const extCSS = await fetchWithProxy(fullUrl);
-        if (extCSS && extCSS.length < 500000) cssText += ' ' + extCSS;
-      } catch(e) { /* skip failed stylesheet */ }
-    }
-
-    // Collect raw signals
-    const themeColor = doc.querySelector('meta[name="theme-color"]')?.getAttribute('content') || '';
-    const tileColor = doc.querySelector('meta[name="msapplication-TileColor"]')?.getAttribute('content') || '';
-
-    // CSS custom properties (now includes external stylesheets)
-    const cssVars = cssText.match(/--[a-zA-Z-]+:\s*#[0-9a-fA-F]{3,8}/gi) || [];
-
-    // All hex colors with frequency
-    const allHex = cssText.match(/#[0-9a-fA-F]{6}/g) || [];
-    const hexFreq = {};
-    allHex.forEach(h => { const l = h.toLowerCase(); hexFreq[l] = (hexFreq[l] || 0) + 1; });
-    const topHex = Object.entries(hexFreq).sort((a,b) => b[1] - a[1]).slice(0, 20).map(([c, n]) => `${c} (${n}x)`).join(', ');
-
-    // RGB/HSL colors from CSS
-    const rgbColors = cssText.match(/rgba?\([^)]+\)/gi)?.slice(0, 10)?.join(', ') || '';
-
-    // Inline style="" attributes on ALL elements (not just header/nav)
-    const inlineColors = [];
-    doc.querySelectorAll('[style]').forEach(el => {
-      const style = el.getAttribute('style') || '';
-      const colorMatch = style.match(/(background(?:-color)?|color|border-color):\s*(#[0-9a-fA-F]{3,8}|rgba?\([^)]+\))/gi);
-      if (colorMatch) inlineColors.push(...colorMatch);
-    });
-
-    // SVG fill/stroke colors (many sites use colored SVGs in headers)
-    const svgColors = [];
-    doc.querySelectorAll('svg [fill], svg [stroke]').forEach(el => {
-      const fill = el.getAttribute('fill');
-      const stroke = el.getAttribute('stroke');
-      if (fill && fill.startsWith('#')) svgColors.push(fill);
-      if (stroke && stroke.startsWith('#')) svgColors.push(stroke);
-    });
-
-    // Page headings and company name for context
-    const pageTitle = doc.querySelector('title')?.textContent || '';
-    const h1Text = doc.querySelector('h1')?.textContent || '';
-
-    // Font signals (now includes external stylesheets)
-    const fontFaces = cssText.match(/@font-face\s*\{[^}]*font-family:\s*['"]?([^'";}\n]+)/gi) || [];
-    const fontFamilies = cssText.match(/font-family:\s*['"]?([^'";}\n,]+)/gi) || [];
-    // Check ALL Google Fonts links (some sites have multiple)
-    const googleFontLinks = Array.from(doc.querySelectorAll('link[href*="fonts.googleapis.com"], link[href*="fonts.gstatic.com"]'))
-      .map(l => l.getAttribute('href')).filter(Boolean);
-    const googleFontNames = [];
-    googleFontLinks.forEach(link => {
-      // Handle both old format (?family=Font+Name) and new format (css2?family=Font+Name:wght@...)
-      const families = link.match(/family=([^&;]+)/g) || [];
-      families.forEach(f => {
-        const name = f.replace('family=', '').replace(/\+/g, ' ').split(':')[0].split('@')[0].trim();
-        if (name && !googleFontNames.includes(name)) googleFontNames.push(name);
-      });
-    });
-
-    showBrandStatus('loading', 'Using AI to identify brand colors and fonts...');
-
-    try {
-      const colorPrompt = `You are a brand designer analyzing a website to extract the exact brand colors AND typography. Be precise.
-
-WEBSITE: ${url}
-Page title: ${pageTitle}
-H1: ${h1Text}
-
-COLOR SIGNALS:
-- theme-color meta: ${themeColor || 'none'}
-- tile-color meta: ${tileColor || 'none'}
-- CSS custom properties: ${cssVars.slice(0, 20).join('; ') || 'none'}
-- Most frequent hex colors in CSS: ${topHex || 'none'}
-- RGB colors in CSS: ${rgbColors || 'none'}
-- Inline style="" colors on page elements: ${inlineColors.slice(0, 15).join('; ') || 'none'}
-- SVG fill/stroke colors: ${svgColors.slice(0, 10).join(', ') || 'none'}
-
-FONT SIGNALS:
-- Google Fonts loaded: ${googleFontNames.join(', ') || 'none'}
-- @font-face declarations: ${fontFaces.slice(0, 8).join('; ') || 'none'}
-- font-family rules in CSS: ${fontFamilies.slice(0, 12).join('; ') || 'none'}
-
-YOUR JOB: Identify 3 brand colors + 2 fonts.
-
-COLORS:
-1. PRIMARY: Main brand/accent color. Buttons, links, headers, logo area. NOT a gray, NOT black/white. The color that screams "this is our brand."
-2. DARK: Dark background for header/navbar/footer. Very dark shade. If white header, derive from primary.
-3. HIGHLIGHT: Secondary accent for hover states, CTAs, badges. Should contrast with dark. If no clear secondary, lighter variant of primary.
-
-FONTS:
-4. HEADING: The font used for headings (h1, h2, hero text). Usually a bolder, more distinctive font. Pick from the Google Fonts or @font-face declarations. Must be a Google Fonts name (available at fonts.googleapis.com).
-5. BODY: The font used for body/paragraph text. Usually more readable, softer. If the site only uses one font, use that for both. Must be a Google Fonts name.
+1. **PRIMARY COLOR**: The main brand color. The one used in their logo, buttons, links, CTAs. NOT gray, NOT black, NOT white. The color that says "this is us."
+2. **DARK COLOR**: The dark background color used in their header, navbar, or footer. A very dark shade. If they use a white header, derive a dark version from their primary.
+3. **HIGHLIGHT COLOR**: A secondary accent color. Used for hover states, badges, secondary CTAs. Should pop against the dark color. If no clear secondary exists, use a lighter/brighter variant of primary.
+4. **HEADING FONT**: The font used for headings (h1, h2, hero). Must be available on Google Fonts. If the site uses a proprietary font, pick the closest Google Fonts match (e.g. Helvetica Neue = Inter, Futura = Poppins, Georgia = Merriweather).
+5. **BODY FONT**: The font for paragraph/body text. Must be a Google Fonts name. If same as heading, repeat it.
+6. **LOGO URL**: The direct URL to their logo image (PNG, SVG, or JPG). Look for their og:image, a logo in their header, or their apple-touch-icon. Must be a full https:// URL that actually works.
 
 RULES:
-- Colors: 6-digit hex (#RRGGBB). No grays, no black, no white for primary/highlight.
-- If CSS vars have --primary/--brand/--accent, that's the primary.
-- Fonts: Use the exact Google Fonts name. If the site uses a custom/proprietary font that's not on Google Fonts, pick the closest Google Fonts equivalent (e.g. Helvetica Neue -> Inter, Arial -> Open Sans, Futura -> Poppins, Playfair -> Playfair Display).
-- If you can't determine fonts, default to "Inter" for heading and "DM Sans" for body.
+- All colors as 6-digit hex (#RRGGBB)
+- Primary and highlight must NOT be gray (#666, #999, etc.), black (#000), or white (#fff)
+- Fonts must be real Google Fonts names
+- If you're not sure about the logo URL, set it to "" (empty string)
+- If you genuinely don't know this website at all, still make your best guess from the domain name and industry
 
-Return ONLY valid JSON:
-{"primary": "#XXXXXX", "dark": "#XXXXXX", "highlight": "#XXXXXX", "fontHeading": "Font Name", "fontBody": "Font Name"}`;
+Return ONLY valid JSON, no markdown fences:
+{"primary": "#XXXXXX", "dark": "#XXXXXX", "highlight": "#XXXXXX", "fontHeading": "Font Name", "fontBody": "Font Name", "logoUrl": "https://..."}`;
 
-      const colorResp = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': _ak_get(),
-          'anthropic-version': '2023-06-01',
-          'anthropic-dangerous-direct-browser-access': 'true'
-        },
-        body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
-          max_tokens: 150,
-          messages: [{ role: 'user', content: colorPrompt }]
-        })
-      });
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': _ak_get(),
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 200,
+        messages: [{ role: 'user', content: brandPrompt }]
+      })
+    });
 
-      if (colorResp.ok) {
-        const colorData = await colorResp.json();
-        let colorJson = colorData.content[0].text.trim();
-        if (colorJson.startsWith('```')) colorJson = colorJson.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
-        const brandColors = JSON.parse(colorJson);
+    if (resp.ok) {
+      const data = await resp.json();
+      let json = data.content[0].text.trim();
+      if (json.startsWith('```')) json = json.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
+      aiResult = JSON.parse(json);
+    }
+  } catch(e) {
+    console.error('AI brand detection failed:', e);
+  }
 
-        if (brandColors.primary && /^#[0-9a-fA-F]{6}$/.test(brandColors.primary)) {
-          document.getElementById('colorPrimaryHex').value = brandColors.primary;
-          document.getElementById('colorPrimary').value = brandColors.primary;
-        }
-        if (brandColors.dark && /^#[0-9a-fA-F]{6}$/.test(brandColors.dark)) {
-          document.getElementById('colorDarkHex').value = brandColors.dark;
-          document.getElementById('colorDark').value = brandColors.dark;
-        }
-        if (brandColors.highlight && /^#[0-9a-fA-F]{6}$/.test(brandColors.highlight)) {
-          document.getElementById('colorHighlightHex').value = brandColors.highlight;
-          document.getElementById('colorHighlight').value = brandColors.highlight;
-        }
-        if (brandColors.fontHeading) {
-          document.getElementById('fontHeading').value = brandColors.fontHeading;
-        }
-        if (brandColors.fontBody) {
-          document.getElementById('fontBody').value = brandColors.fontBody;
+  // ─── TRACK 2: CORS FETCH (best-effort bonus for logo + CSS signals) ───
+  // If a proxy works, we get the actual HTML and can extract the real logo.
+  let corsLogo = '';
+  let cssSignals = '';
+  try {
+    showBrandStatus('loading', 'Checking website for logo...');
+    const html = await fetchWithProxy(url);
+    if (html) {
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(html, 'text/html');
+
+      // Extract logo from HTML
+      const ogImage = doc.querySelector('meta[property="og:image"]');
+      if (ogImage) corsLogo = ogImage.getAttribute('content');
+
+      if (!corsLogo) {
+        const touchIcon = doc.querySelector('link[rel="apple-touch-icon"]');
+        if (touchIcon) corsLogo = touchIcon.getAttribute('href');
+      }
+
+      if (!corsLogo) {
+        const imgs = doc.querySelectorAll('img');
+        for (const img of imgs) {
+          const src = (img.getAttribute('src') || '').toLowerCase();
+          const alt = (img.getAttribute('alt') || '').toLowerCase();
+          const cls = (img.getAttribute('class') || '').toLowerCase();
+          if (src.includes('logo') || alt.includes('logo') || cls.includes('logo')) {
+            corsLogo = img.getAttribute('src');
+            break;
+          }
         }
       }
-    } catch(colorErr) {
-      // AI color extraction failed, fall back to basic heuristics
-      console.error('AI color extraction failed:', colorErr);
-      const fallbackColors = [];
-      if (themeColor) fallbackColors.push(themeColor);
-      if (tileColor) fallbackColors.push(tileColor);
-      const basicHex = Object.entries(hexFreq)
-        .filter(([c]) => {
-          const rgb = hexToRGB(c);
-          const avg = (rgb.r + rgb.g + rgb.b) / 3;
-          const saturation = Math.max(rgb.r, rgb.g, rgb.b) - Math.min(rgb.r, rgb.g, rgb.b);
-          return avg > 30 && avg < 220 && saturation > 30; // Skip grays, near-black, near-white
-        })
-        .sort((a,b) => b[1] - a[1])
-        .slice(0, 3)
-        .map(([c]) => c);
-      fallbackColors.push(...basicHex);
 
-      if (fallbackColors.length > 0) {
-        document.getElementById('colorPrimaryHex').value = fallbackColors[0];
-        document.getElementById('colorPrimary').value = fallbackColors[0];
-        if (fallbackColors[1]) {
-          document.getElementById('colorDarkHex').value = fallbackColors[1];
-          document.getElementById('colorDark').value = fallbackColors[1];
-        }
+      if (!corsLogo) {
+        const favicon = doc.querySelector('link[rel="icon"], link[rel="shortcut icon"]');
+        if (favicon) corsLogo = favicon.getAttribute('href');
       }
+
+      // Resolve relative URLs
+      if (corsLogo && !corsLogo.startsWith('http')) {
+        try { corsLogo = new URL(corsLogo, url).href; } catch(e) {}
+      }
+
+      // Collect CSS signals to refine AI result
+      const styleEls = doc.querySelectorAll('style');
+      const rawCSS = Array.from(styleEls).map(s => s.textContent).join(' ');
+      const cssVars = rawCSS.match(/--[a-zA-Z-]+:\s*#[0-9a-fA-F]{3,8}/gi) || [];
+      const themeColor = doc.querySelector('meta[name="theme-color"]')?.getAttribute('content') || '';
+      if (cssVars.length || themeColor) {
+        cssSignals = `CSS vars: ${cssVars.slice(0,10).join('; ')}. Theme-color: ${themeColor}`;
+      }
+    }
+  } catch(e) {
+    // CORS failed silently — Track 1 covers us
+  }
+
+  // ─── APPLY RESULTS ───
+  if (aiResult) {
+    if (aiResult.primary && /^#[0-9a-fA-F]{6}$/.test(aiResult.primary)) {
+      document.getElementById('colorPrimaryHex').value = aiResult.primary;
+      document.getElementById('colorPrimary').value = aiResult.primary;
+    }
+    if (aiResult.dark && /^#[0-9a-fA-F]{6}$/.test(aiResult.dark)) {
+      document.getElementById('colorDarkHex').value = aiResult.dark;
+      document.getElementById('colorDark').value = aiResult.dark;
+    }
+    if (aiResult.highlight && /^#[0-9a-fA-F]{6}$/.test(aiResult.highlight)) {
+      document.getElementById('colorHighlightHex').value = aiResult.highlight;
+      document.getElementById('colorHighlight').value = aiResult.highlight;
+    }
+    if (aiResult.fontHeading) {
+      document.getElementById('fontHeading').value = aiResult.fontHeading;
+    }
+    if (aiResult.fontBody) {
+      document.getElementById('fontBody').value = aiResult.fontBody;
+    }
+
+    // Logo: prefer CORS-extracted (more reliable), fall back to AI suggestion
+    const logoToUse = corsLogo || aiResult.logoUrl || '';
+    if (logoToUse) {
+      document.getElementById('logoUrl').value = logoToUse;
     }
 
     const found = [];
-    if (logo) found.push('logo');
-    const detectedPrimary = document.getElementById('colorPrimaryHex').value;
-    if (detectedPrimary && detectedPrimary !== '#0D9488') found.push('colors');
-    const detectedFont = document.getElementById('fontHeading').value;
-    if (detectedFont && detectedFont !== 'Inter') found.push('fonts');
+    if (logoToUse) found.push('logo');
+    found.push('colors', 'fonts');
+    showBrandStatus('success', `Detected: ${found.join(', ')}. Review and adjust if needed.`);
 
-    if (found.length > 0) {
-      showBrandStatus('success', `Detected: ${found.join(', ')}. Review and adjust if needed.`);
-    } else {
-      showBrandStatus('error', 'Could not auto-detect branding. Enter colors and logo manually.');
-    }
+  } else if (corsLogo) {
+    // AI failed but we got a logo from CORS
+    document.getElementById('logoUrl').value = corsLogo;
+    showBrandStatus('error', 'Could only detect logo. Enter colors and fonts manually.');
 
-  } catch (err) {
-    showBrandStatus('error', 'Error fetching site: ' + err.message + '. Enter colors/logo manually.');
+  } else {
+    showBrandStatus('error', 'Could not auto-detect branding. Enter colors, fonts, and logo manually.');
   }
 }
 
@@ -835,6 +734,7 @@ async function pullFromSheet() {
       try {
         const csvUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv`;
         const csvText = await fetchWithProxy(csvUrl);
+        if (!csvText) throw new Error('CORS proxy unavailable');
         rows = parseCSV(csvText);
       } catch(e2) {
         throw new Error('Could not fetch sheet. Make sure it is shared: open the sheet → Share → "Anyone with the link" → Viewer. Then try again.');
@@ -1477,6 +1377,7 @@ async function generateAINotes() {
     showAIStatus('loading', 'Scanning client website for context...');
     try {
       const siteHTML = await fetchWithProxy(v.clientUrl);
+      if (!siteHTML) throw new Error('CORS unavailable');
       const siteParser = new DOMParser();
       const siteDoc = siteParser.parseFromString(siteHTML, 'text/html');
       const metaDesc = siteDoc.querySelector('meta[name="description"]')?.getAttribute('content') || '';
