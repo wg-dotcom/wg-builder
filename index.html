@@ -534,15 +534,34 @@ async function extractBranding() {
     if (logo) document.getElementById('logoUrl').value = logo;
 
     // --- EXTRACT COLORS + FONTS VIA CLAUDE AI ---
-    // Gather all color and font signals from the page for Claude to analyze
+    showBrandStatus('loading', 'Analyzing website styles...');
+
+    // 1. Inline <style> tags
     const styleEls = doc.querySelectorAll('style');
-    const cssText = Array.from(styleEls).map(s => s.textContent).join(' ');
+    let cssText = Array.from(styleEls).map(s => s.textContent).join(' ');
+
+    // 2. Also try to fetch external stylesheets (many sites use <link> not <style>)
+    const cssLinks = Array.from(doc.querySelectorAll('link[rel="stylesheet"]'))
+      .map(l => l.getAttribute('href'))
+      .filter(h => h && !h.includes('fonts.googleapis.com') && !h.includes('font-awesome'));
+
+    // Resolve relative URLs and fetch up to 3 external stylesheets
+    for (const cssHref of cssLinks.slice(0, 3)) {
+      try {
+        let fullUrl = cssHref;
+        if (!fullUrl.startsWith('http')) {
+          try { fullUrl = new URL(cssHref, url).href; } catch(e) { continue; }
+        }
+        const extCSS = await fetchWithProxy(fullUrl);
+        if (extCSS && extCSS.length < 500000) cssText += ' ' + extCSS;
+      } catch(e) { /* skip failed stylesheet */ }
+    }
 
     // Collect raw signals
     const themeColor = doc.querySelector('meta[name="theme-color"]')?.getAttribute('content') || '';
     const tileColor = doc.querySelector('meta[name="msapplication-TileColor"]')?.getAttribute('content') || '';
 
-    // CSS custom properties
+    // CSS custom properties (now includes external stylesheets)
     const cssVars = cssText.match(/--[a-zA-Z-]+:\s*#[0-9a-fA-F]{3,8}/gi) || [];
 
     // All hex colors with frequency
@@ -554,25 +573,42 @@ async function extractBranding() {
     // RGB/HSL colors from CSS
     const rgbColors = cssText.match(/rgba?\([^)]+\)/gi)?.slice(0, 10)?.join(', ') || '';
 
-    // Inline styles on key elements
+    // Inline style="" attributes on ALL elements (not just header/nav)
     const inlineColors = [];
-    doc.querySelectorAll('header, nav, .header, .navbar, [class*="hero"], [class*="banner"], button, a').forEach(el => {
+    doc.querySelectorAll('[style]').forEach(el => {
       const style = el.getAttribute('style') || '';
-      const cls = el.getAttribute('class') || '';
       const colorMatch = style.match(/(background(?:-color)?|color|border-color):\s*(#[0-9a-fA-F]{3,8}|rgba?\([^)]+\))/gi);
       if (colorMatch) inlineColors.push(...colorMatch);
+    });
+
+    // SVG fill/stroke colors (many sites use colored SVGs in headers)
+    const svgColors = [];
+    doc.querySelectorAll('svg [fill], svg [stroke]').forEach(el => {
+      const fill = el.getAttribute('fill');
+      const stroke = el.getAttribute('stroke');
+      if (fill && fill.startsWith('#')) svgColors.push(fill);
+      if (stroke && stroke.startsWith('#')) svgColors.push(stroke);
     });
 
     // Page headings and company name for context
     const pageTitle = doc.querySelector('title')?.textContent || '';
     const h1Text = doc.querySelector('h1')?.textContent || '';
 
-    // Font signals
+    // Font signals (now includes external stylesheets)
     const fontFaces = cssText.match(/@font-face\s*\{[^}]*font-family:\s*['"]?([^'";}\n]+)/gi) || [];
     const fontFamilies = cssText.match(/font-family:\s*['"]?([^'";}\n,]+)/gi) || [];
-    const googleFontsLink = doc.querySelector('link[href*="fonts.googleapis.com"]')?.getAttribute('href') || '';
-    // Extract font names from Google Fonts URL
-    const googleFontNames = googleFontsLink.match(/family=([^&]+)/)?.[1]?.replace(/\+/g, ' ')?.split('|')?.map(f => f.split(':')[0]) || [];
+    // Check ALL Google Fonts links (some sites have multiple)
+    const googleFontLinks = Array.from(doc.querySelectorAll('link[href*="fonts.googleapis.com"], link[href*="fonts.gstatic.com"]'))
+      .map(l => l.getAttribute('href')).filter(Boolean);
+    const googleFontNames = [];
+    googleFontLinks.forEach(link => {
+      // Handle both old format (?family=Font+Name) and new format (css2?family=Font+Name:wght@...)
+      const families = link.match(/family=([^&;]+)/g) || [];
+      families.forEach(f => {
+        const name = f.replace('family=', '').replace(/\+/g, ' ').split(':')[0].split('@')[0].trim();
+        if (name && !googleFontNames.includes(name)) googleFontNames.push(name);
+      });
+    });
 
     showBrandStatus('loading', 'Using AI to identify brand colors and fonts...');
 
@@ -586,10 +622,11 @@ H1: ${h1Text}
 COLOR SIGNALS:
 - theme-color meta: ${themeColor || 'none'}
 - tile-color meta: ${tileColor || 'none'}
-- CSS custom properties: ${cssVars.slice(0, 15).join('; ') || 'none'}
-- Most frequent hex colors: ${topHex || 'none'}
-- RGB colors: ${rgbColors || 'none'}
-- Inline styles on header/nav/buttons: ${inlineColors.slice(0, 10).join('; ') || 'none'}
+- CSS custom properties: ${cssVars.slice(0, 20).join('; ') || 'none'}
+- Most frequent hex colors in CSS: ${topHex || 'none'}
+- RGB colors in CSS: ${rgbColors || 'none'}
+- Inline style="" colors on page elements: ${inlineColors.slice(0, 15).join('; ') || 'none'}
+- SVG fill/stroke colors: ${svgColors.slice(0, 10).join(', ') || 'none'}
 
 FONT SIGNALS:
 - Google Fonts loaded: ${googleFontNames.join(', ') || 'none'}
