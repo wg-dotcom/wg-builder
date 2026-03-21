@@ -223,25 +223,25 @@
     <!-- ─── SIDEBAR FORM ─── -->
     <div class="sidebar">
       <div class="step-tabs">
-        <button class="step-tab active" onclick="switchTab(0)">1. Client</button>
+        <button class="step-tab active" onclick="switchTab(0)">1. Customer</button>
         <button class="step-tab" onclick="switchTab(1)">2. Context</button>
         <button class="step-tab" onclick="switchTab(2)">3. Candidates</button>
       </div>
 
-      <!-- ── TAB 1: CLIENT INFO ── -->
+      <!-- ── TAB 1: CUSTOMER INFO ── -->
       <div class="step-content active" id="tab-0">
         <div class="form-section">
-          <div class="form-section-title">Client Information</div>
+          <div class="form-section-title">Customer Information</div>
           <div class="form-group">
-            <label>Client / Company Name</label>
+            <label>Customer / Company Name</label>
             <input type="text" id="clientName" placeholder="e.g. Acme Corp" />
           </div>
           <div class="form-group">
-            <label>Client Contact First Name</label>
+            <label>Customer Contact First Name</label>
             <input type="text" id="clientContact" placeholder="e.g. Randy, Michael" />
           </div>
           <div class="form-group">
-            <label>Client Website URL</label>
+            <label>Customer Website URL</label>
             <input type="url" id="clientUrl" placeholder="https://example.com" />
           </div>
           <div class="form-group">
@@ -325,7 +325,7 @@
         <div class="form-section">
           <div class="form-section-title">Intro Message</div>
           <div class="form-group">
-            <label>Personalized intro to the client (appears at the top of the page)</label>
+            <label>Personalized intro to the customer (appears at the top of the page)</label>
             <textarea id="introNote" rows="5" placeholder="Hi {name}, here is your first batch of {role} candidates for {company}. Each profile has been vetted for..."></textarea>
           </div>
         </div>
@@ -334,7 +334,7 @@
           <div class="form-section-title">Context & Pain Points</div>
           <div class="form-group">
             <label>Quick pain points and priorities</label>
-            <textarea id="contextNotes" rows="4" placeholder="What the client cares about most: urgency, specific needs, dealbreakers..."></textarea>
+            <textarea id="contextNotes" rows="4" placeholder="What the customer cares about most: urgency, specific needs, dealbreakers..."></textarea>
           </div>
         </div>
 
@@ -342,7 +342,7 @@
           <div class="form-section-title">📓 Deep Context (NotebookLM / Research)</div>
           <div class="form-group">
             <label>Paste your NotebookLM notes, call transcripts, or research here. The more context, the better the AI writes.</label>
-            <textarea id="notebookContext" rows="10" placeholder="Paste from NotebookLM, Granola transcripts, client emails, research notes...&#10;&#10;Examples:&#10;- Call notes: 'Client mentioned they lost 2 ops managers in 6 months, need someone who can hit the ground running...'&#10;- Company research: 'Series B, 45 employees, expanding to LATAM...'&#10;- Role specifics: 'Must know HubSpot + Salesforce migration, reporting to COO directly...'"></textarea>
+            <textarea id="notebookContext" rows="10" placeholder="Paste from NotebookLM, Granola transcripts, customer emails, research notes...&#10;&#10;Examples:&#10;- Call notes: 'Customer mentioned they lost 2 ops managers in 6 months, need someone who can hit the ground running...'&#10;- Company research: 'Series B, 45 employees, expanding to LATAM...'&#10;- Role specifics: 'Must know HubSpot + Salesforce migration, reporting to COO directly...'"></textarea>
           </div>
         </div>
 
@@ -368,7 +368,7 @@
             <input type="url" id="sheetUrl" value="https://docs.google.com/spreadsheets/d/1jfja4wRpk4hyvdGq4HxU-D-7i6FDnUc_dBM4s0Fho0Q/edit" />
           </div>
           <div id="filterPreview" style="font-size:12px;color:var(--text-dim);padding:8px 12px;background:var(--bg);border-radius:8px;margin-bottom:12px;">
-            Filters from Client tab: <strong id="filterPreviewText">fill in Tab 1 first</strong>
+            Filters from Customer tab: <strong id="filterPreviewText">fill in Tab 1 first</strong>
           </div>
           <button class="btn btn-accent" onclick="pullFromSheet()" style="width:100%; justify-content: center;">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9"/></svg>
@@ -553,7 +553,7 @@ async function fetchWithProxy(url) {
 
 async function extractBranding() {
   let url = document.getElementById('clientUrl').value.trim();
-  if (!url) { showBrandStatus('error', 'Enter a client website URL first.'); return; }
+  if (!url) { showBrandStatus('error', 'Enter a customer website URL first.'); return; }
   if (!/^https?:\/\//i.test(url)) { url = 'https://' + url; document.getElementById('clientUrl').value = url; }
 
   showBrandStatus('loading', 'Detecting brand identity...');
@@ -1553,13 +1553,16 @@ async function generateResumeData() {
       c.resumeData.fullExtract = true;
     } catch(err) {
       console.error('Resume data failed for ' + c.name + ':', err);
+      // Fallback: build resume from existing data instead of empty
+      const existingExp = c.resumeData?.experience || [];
       c.resumeData = {
-        summary: c.summary || '',
+        summary: c.recruiterNote || c.summary || '',
         skillCategories: c.skills ? [{category: 'Core Skills', skills: c.skills}] : [],
-        experience: [],
+        experience: existingExp,
         education: [],
         certifications: [],
-        languages: []
+        languages: [],
+        fullExtract: existingExp.length > 0 // Don't retry if we have jobs
       };
     }
   }
@@ -1764,6 +1767,17 @@ async function autoDeploy() {
     const batchMsg = existingHTML ? `Batch ${v.batchNumber} merged into existing page!` : 'Deployed!';
     showToast(`${batchMsg} Your page will be live in ~60 seconds:<br><a href="${liveUrl}" target="_blank" style="color:var(--green);font-weight:700;font-size:14px;">${liveUrl}</a>`, 'success');
 
+    // Show the deployed URL in a persistent field
+    let urlField = document.getElementById('deployedUrl');
+    if (!urlField) {
+      const container = document.createElement('div');
+      container.style.cssText = 'padding:12px 16px;margin:12px 0;background:var(--cream);border:1px solid var(--border);border-radius:10px;';
+      container.innerHTML = '<label style="font-size:11px;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-muted);margin-bottom:4px;display:block;">Deployed URL</label><input id="deployedUrl" type="text" readonly style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:white;color:var(--text);cursor:pointer;" onclick="this.select();document.execCommand(\'copy\');showToast(\'URL copied!\',\'success\')" />';
+      document.getElementById('deployBtn').parentElement.after(container);
+      urlField = document.getElementById('deployedUrl');
+    }
+    urlField.value = liveUrl;
+
   } catch(err) {
     showToast('Deploy failed: ' + err.message, 'error');
   } finally {
@@ -1796,7 +1810,7 @@ async function generateAINotes() {
   // Fetch client website content for richer context (skip if slow, don't block notes)
   let clientSiteContext = '';
   if (v.clientUrl) {
-    showAIStatus('loading', 'Scanning client website for context...');
+    showAIStatus('loading', 'Scanning customer website for context...');
     try {
       const siteHTML = await Promise.race([
         fetchWithProxy(v.clientUrl),
