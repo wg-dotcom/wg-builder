@@ -1244,7 +1244,7 @@ function generateCandidateCard(c, idx, v) {
       <div class="card-footer">
         <div class="footer-note"><strong>${escHTML(c.salary || v.salaryRange || 'TBD')}</strong> &middot; ${escHTML(v.schedule)}</div>
         <div class="btn-group">
-          ${c.resumeLink ? `<a class="btn-card btn-outline" href="${escHTML(c.resumeLink)}" target="_blank"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Resume</a>` : ''}
+          <a class="btn-card btn-outline" href="resume-${c.name.split(' ')[0].toLowerCase().replace(/[^a-z0-9]/g, '')}.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Resume</a>
           ${c.videoLink ? `<a class="btn-card btn-primary-card" href="${escHTML(c.videoLink)}" target="_blank"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>Intro Video</a>` : ''}
           ${c.tap ? `<a class="btn-card btn-tap" href="https://drive.google.com/file/d/1lvb0EWiOoIzbKKFGXN0IiuDjdGYOZdHC/view" target="_blank"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>TAP Info</a>` : ''}
         </div>
@@ -1260,6 +1260,194 @@ function generateCandidateCard(c, idx, v) {
         <p>${escHTML(c.name.split(' ')[0])} brings a strong profile aligned with the ${escHTML(v.roleTitle)} position at ${escHTML(v.clientName)}. ${c.experience ? 'With ' + escHTML(c.experience) + ' of experience, they' : 'They'} offer the skills and background needed to make an immediate impact.</p>
       </div>`}
     </article>`;
+}
+
+function buildResumeHTML(c, v) {
+  const firstName = c.name.split(' ')[0];
+  const skills = c.skills ? c.skills.split(',').map(s => s.trim()).filter(Boolean) : [];
+
+  // Split skills into categories (rough grouping)
+  const skillChunks = [];
+  for (let i = 0; i < skills.length; i += 4) {
+    skillChunks.push(skills.slice(i, i + 4).join(', '));
+  }
+
+  // Parse experience entries from resumeData if available, otherwise use summary
+  const experienceSection = c.resumeData?.experience?.length ? c.resumeData.experience.map(exp => `
+    <div class="experience-item">
+      <div class="exp-header">
+        <div class="exp-role">${escHTML(exp.role)}</div>
+        <div class="exp-company">${escHTML(exp.company)}</div>
+        <div class="exp-meta">${escHTML(exp.dates || '')}</div>
+      </div>
+      <div class="exp-desc">${escHTML(exp.description || '')}</div>
+    </div>`).join('') : '';
+
+  const educationSection = c.resumeData?.education?.length ? c.resumeData.education.map(edu => `
+    <div class="education-item">
+      <div class="edu-degree">${escHTML(edu.degree)}</div>
+      <div class="edu-school">${escHTML(edu.school)}</div>
+      ${edu.year ? `<div class="edu-year">${escHTML(edu.year)}</div>` : ''}
+    </div>`).join('') : '';
+
+  const certsSection = c.resumeData?.certifications?.length ? c.resumeData.certifications.map(cert => `
+    <div class="cert-item"><span class="cert-name">${escHTML(cert)}</span></div>`).join('') : '';
+
+  const langsSection = c.resumeData?.languages?.length ? c.resumeData.languages.map(lang => `
+    <div class="lang-item"><strong>${escHTML(lang.name)}:</strong> ${escHTML(lang.level)}</div>`).join('') : '';
+
+  const skillsGridSection = c.resumeData?.skillCategories?.length ? c.resumeData.skillCategories.map(cat => `
+    <div class="skill-label">${escHTML(cat.category)}</div>
+    <div class="skill-value">${escHTML(cat.skills)}</div>`).join('') : (skills.length ? `
+    <div class="skill-label">Core Skills</div>
+    <div class="skill-value">${escHTML(skills.join(', '))}</div>` : '');
+
+  const summaryText = c.resumeData?.summary || c.summary || '';
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${escHTML(c.name)} - ${escHTML(v.roleTitle)} | ${escHTML(v.clientName)}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=${encodeURIComponent(v.fontHeading)}:wght@400;500;600;700&family=${encodeURIComponent(v.fontBody)}:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    :root {
+      --primary: ${v.colorPrimary};
+      --dark: ${v.colorDark};
+      --highlight: ${v.colorHighlight};
+      --white: #FFFFFF;
+      --gray-50: #F8FAFB;
+      --gray-100: #F1F5F4;
+      --gray-200: #E2E8E7;
+      --gray-400: #94A3A0;
+      --gray-600: #4B5E5A;
+      --gray-700: #374845;
+      --font-heading: '${v.fontHeading}', sans-serif;
+      --font-body: '${v.fontBody}', sans-serif;
+    }
+    body { font-family: var(--font-body); background: var(--gray-50); color: var(--dark); line-height: 1.6; -webkit-font-smoothing: antialiased; }
+    .back-link { display: block; background: var(--dark); padding: 12px 40px; font-family: var(--font-heading); font-size: 14px; font-weight: 500; }
+    .back-link a { color: var(--highlight); text-decoration: none; transition: color 0.2s; }
+    .back-link a:hover { color: var(--white); }
+    .back-link a::before { content: "\\2190\\00a0\\00a0"; }
+    header { background: var(--dark); padding: 48px 40px 52px; position: relative; overflow: hidden; }
+    header::after { content: ""; position: absolute; bottom: 0; left: 0; right: 0; height: 4px; background: linear-gradient(90deg, var(--primary), var(--highlight)); }
+    .header-brand { font-family: var(--font-heading); font-size: 32px; font-weight: 700; color: var(--white); letter-spacing: -0.5px; margin-bottom: 4px; }
+    .header-brand span { color: var(--highlight); }
+    .header-subtitle { font-family: var(--font-body); font-size: 14px; font-weight: 400; color: var(--gray-400); text-transform: uppercase; letter-spacing: 2px; }
+    .candidate-banner { background: linear-gradient(135deg, var(--primary), ${v.colorHighlight}); padding: 36px 40px; color: var(--white); }
+    .candidate-name { font-family: var(--font-heading); font-size: 28px; font-weight: 700; letter-spacing: -0.3px; margin-bottom: 6px; }
+    .candidate-title { font-size: 16px; font-weight: 400; opacity: 0.9; margin-bottom: 12px; }
+    .candidate-contact { display: flex; flex-wrap: wrap; gap: 20px; font-size: 13px; opacity: 0.85; }
+    .resume-body { max-width: 900px; margin: 0 auto; padding: 40px 40px 60px; }
+    .section { margin-bottom: 36px; }
+    .section-title { font-family: var(--font-heading); font-size: 18px; font-weight: 700; color: var(--primary); text-transform: uppercase; letter-spacing: 1.5px; padding-bottom: 10px; border-bottom: 2px solid var(--gray-200); margin-bottom: 18px; }
+    .summary-text { font-size: 15px; color: var(--gray-700); line-height: 1.75; }
+    .skills-grid { display: grid; grid-template-columns: 170px 1fr; gap: 10px 20px; font-size: 14px; }
+    .skill-label { font-weight: 600; color: var(--dark); padding: 4px 0; }
+    .skill-value { color: var(--gray-600); padding: 4px 0; line-height: 1.6; }
+    .experience-item { margin-bottom: 24px; padding-left: 20px; border-left: 3px solid var(--primary); }
+    .experience-item:last-child { margin-bottom: 0; }
+    .exp-header { margin-bottom: 8px; }
+    .exp-role { font-family: var(--font-heading); font-size: 16px; font-weight: 700; color: var(--dark); }
+    .exp-company { font-size: 14px; font-weight: 500; color: var(--primary); }
+    .exp-meta { font-size: 13px; color: var(--gray-400); margin-top: 2px; }
+    .exp-desc { font-size: 14px; color: var(--gray-600); line-height: 1.65; }
+    .education-item, .cert-item, .lang-item { font-size: 15px; margin-bottom: 8px; }
+    .edu-degree, .cert-name { font-weight: 600; color: var(--dark); }
+    .edu-school { color: var(--primary); font-weight: 500; }
+    .edu-year { font-size: 13px; color: var(--gray-400); }
+    footer { background: var(--dark); padding: 32px 40px; text-align: center; position: relative; }
+    footer::before { content: ""; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: linear-gradient(90deg, var(--primary), var(--highlight)); }
+    .footer-text { font-family: var(--font-heading); font-size: 14px; color: var(--gray-400); }
+    .footer-text strong { color: var(--white); }
+    .footer-text .accent { color: var(--highlight); }
+    .footer-sub { font-size: 12px; color: var(--gray-600); margin-top: 8px; }
+    @media (max-width: 640px) {
+      header, .candidate-banner, .resume-body, .back-link, footer { padding-left: 20px; padding-right: 20px; }
+      .skills-grid { grid-template-columns: 1fr; }
+      .candidate-contact { flex-direction: column; gap: 6px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="back-link"><a href="index.html">Back to All Candidates</a></div>
+  <header>
+    <div class="header-brand">${escHTML(v.clientName)}<span>.</span></div>
+    <div class="header-subtitle">Candidate Resume</div>
+  </header>
+  <div class="candidate-banner">
+    <div class="candidate-name">${escHTML(c.name)}</div>
+    <div class="candidate-title">${escHTML(v.roleTitle)}${c.location ? ' | ' + escHTML(c.location) : ''}</div>
+    <div class="candidate-contact">
+      ${c.location ? `<span>${escHTML(c.location)}</span>` : ''}
+      ${c.experience ? `<span>${escHTML(c.experience)} experience</span>` : ''}
+    </div>
+  </div>
+  <div class="resume-body">
+    ${summaryText ? `<div class="section"><div class="section-title">Summary</div><p class="summary-text">${escHTML(summaryText.replace(/\\n/g, ' ').replace(/^[-•*]\s*/gm, ''))}</p></div>` : ''}
+    ${skillsGridSection ? `<div class="section"><div class="section-title">Skills</div><div class="skills-grid">${skillsGridSection}</div></div>` : ''}
+    ${experienceSection ? `<div class="section"><div class="section-title">Work Experience</div>${experienceSection}</div>` : ''}
+    ${educationSection ? `<div class="section"><div class="section-title">Education</div>${educationSection}</div>` : ''}
+    ${certsSection ? `<div class="section"><div class="section-title">Certifications</div>${certsSection}</div>` : ''}
+    ${langsSection ? `<div class="section"><div class="section-title">Languages</div>${langsSection}</div>` : ''}
+  </div>
+  <footer>
+    <div class="footer-text">Presented by <strong>Sagan</strong> for <strong class="accent">${escHTML(v.clientName)}</strong></div>
+    <div class="footer-sub">getsagan.com · Redefining Recruitment</div>
+  </footer>
+</body>
+</html>`;
+}
+
+// Generate structured resume data from AI
+async function generateResumeData() {
+  if (candidates.length === 0) return;
+
+  const v = getFormValues();
+
+  for (let i = 0; i < candidates.length; i++) {
+    const c = candidates[i];
+    if (c.resumeData) continue;
+
+    showAIStatus('loading', 'Building resume for ' + c.name + ' (' + (i + 1) + '/' + candidates.length + ')...');
+
+    try {
+      const prompt = 'You are extracting structured resume data for a candidate to generate a branded resume page. Use ALL available information to build a comprehensive profile.\n\n' +
+        'CANDIDATE:\n' +
+        '- Name: ' + c.name + '\n' +
+        '- Role applying for: ' + v.roleTitle + '\n' +
+        '- Location: ' + (c.location || 'Not specified') + '\n' +
+        '- Experience: ' + (c.experience || 'Not specified') + '\n' +
+        '- Skills: ' + (c.skills || 'Not specified') + '\n' +
+        '- Summary/Notes: ' + (c.summary || 'Not specified') + '\n\n' +
+        'Generate a structured resume. Be specific and detailed. Use the skills and experience info to infer realistic work history if not explicitly provided.\n\n' +
+        'Return ONLY valid JSON:\n' +
+        '{"summary":"2-3 sentence professional summary","skillCategories":[{"category":"Category Name","skills":"Skill 1, Skill 2, Skill 3"}],"experience":[{"role":"Job Title","company":"Company Name","dates":"Year - Year","description":"Key accomplishments and responsibilities."}],"education":[{"degree":"Degree Name","school":"School Name","year":"Year"}],"certifications":["Cert Name"],"languages":[{"name":"Language","level":"Proficiency"}]}';
+
+      const text = await callAI(prompt, 1200);
+      let jsonStr = text;
+      jsonStr = jsonStr.replace(/^[\s\S]*?```(?:json)?\s*\n?/i, '').replace(/\n?\s*```[\s\S]*$/, '');
+      if (!jsonStr.trim().startsWith('{')) { const m = jsonStr.match(/\{[\s\S]*\}/); if (m) jsonStr = m[0]; }
+      jsonStr = jsonStr.trim();
+      if (!jsonStr.endsWith('}')) { if (jsonStr.match(/"[^"]*$/)) jsonStr += '"'; if (!jsonStr.endsWith(']')) jsonStr += ']'; jsonStr += '}'; }
+      c.resumeData = JSON.parse(jsonStr);
+    } catch(err) {
+      console.error('Resume data failed for ' + c.name + ':', err);
+      c.resumeData = {
+        summary: c.summary || '',
+        skillCategories: c.skills ? [{category: 'Core Skills', skills: c.skills}] : [],
+        experience: [],
+        education: [],
+        certifications: [],
+        languages: []
+      };
+    }
+  }
 }
 
 function generateComparisonTable(cands, v) {
@@ -1398,6 +1586,41 @@ async function autoDeploy() {
       body: JSON.stringify(putBody)
     });
     if (!pushResp.ok) { throw new Error((await pushResp.json()).message || 'Failed to push file'); }
+
+    // 5b. Generate and push branded resume pages for each candidate
+    showToast(`Generating branded resumes for ${candidates.length} candidates...`, 'loading');
+
+    // Generate resume data via AI if not already done
+    await generateResumeData();
+
+    for (let i = 0; i < candidates.length; i++) {
+      const c = candidates[i];
+      const resumeFilename = `resume-${c.name.split(' ')[0].toLowerCase().replace(/[^a-z0-9]/g, '')}.html`;
+      showToast(`Pushing resume ${i + 1}/${candidates.length}: ${c.name}...`, 'loading');
+
+      const resumeHTML = buildResumeHTML(c, v);
+      const resumeContent = btoa(unescape(encodeURIComponent(resumeHTML)));
+
+      // Check if resume file already exists (get SHA)
+      let resumeSha = null;
+      try {
+        const rc = await fetch(`https://api.github.com/repos/${GH_ORG}/${repo}/contents/${resumeFilename}`, {
+          headers: { 'Authorization': `token ${token}`, 'Accept': 'application/vnd.github.v3+json' }
+        });
+        if (rc.ok) { const rd = await rc.json(); resumeSha = rd.sha; }
+      } catch(e) {}
+
+      const resumePut = { message: `Add branded resume: ${c.name}`, content: resumeContent };
+      if (resumeSha) resumePut.sha = resumeSha;
+
+      try {
+        await fetch(`https://api.github.com/repos/${GH_ORG}/${repo}/contents/${resumeFilename}`, {
+          method: 'PUT',
+          headers: { 'Authorization': `token ${token}`, 'Accept': 'application/vnd.github.v3+json', 'Content-Type': 'application/json' },
+          body: JSON.stringify(resumePut)
+        });
+      } catch(e) { console.error(`Failed to push resume for ${c.name}:`, e); }
+    }
 
     // 6. Enable GitHub Pages
     try {
