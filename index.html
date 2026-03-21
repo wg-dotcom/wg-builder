@@ -1836,7 +1836,12 @@ Why bullets:
 - HubSpot + Zendesk power user. Already speaks the tools Wingz runs on.
 Note: "Andrea is the operator mindset pick. She doesn't wait for instructions. She builds the playbook. At her current company she cut response times 40% by redesigning the dispatch workflow. Built for the long haul. The kind of hire you talk about years later."
 
-DIFFERENTIATION RULE: Each candidate MUST have a unique angle in their note. Use a DIFFERENT sommelier phrase for each. Candidate #1 might be "the safe bet", #2 "the force multiplier", #3 "the Swiss Army knife", #4 "the calculated risk worth taking". NEVER repeat the same framing across candidates. Each note should answer a DIFFERENT question: one about reliability, one about upside, one about culture fit, one about technical depth, one about value.
+DIFFERENTIATION RULE: Each candidate MUST have a unique angle. Use a DIFFERENT sommelier phrase for each. NEVER repeat the same framing.
+${candidates.slice(0, i).filter(prev => prev.recruiterNote).length ? `
+ALREADY WRITTEN NOTES (DO NOT repeat these phrases, angles, or openers):
+${candidates.slice(0, i).filter(prev => prev.recruiterNote).map(prev => `- ${prev.name}: "${prev.recruiterNote}"`).join('\n')}
+
+You MUST use a completely different angle, different sommelier term, and different opening word than ALL notes above.` : ''}
 
 KEEP IT TIGHT: "why" = exactly 3-5 SHORT bullets separated by \\n. Each bullet is ONE line, max 15 words. Start with a specific fact (tool, number, cert). "note" = 2-3 sentences MAX (under 60 words). No rambling. No filler.
 
