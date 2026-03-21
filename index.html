@@ -828,10 +828,10 @@ async function pullFromSheet() {
     const videoIdx = headers.findIndex(h => h.includes('video'));
     const tapIdx = headers.findIndex(h => h.includes('tap') || h.includes('talent agent'));
     const locationIdx = headers.findIndex(h => h.includes('location') || h.includes('country'));
-    const experienceIdx = headers.findIndex(h => h.includes('experience') || h.includes('years'));
-    const salaryIdx = headers.findIndex(h => h.includes('salary') || h.includes('rate') || h.includes('compensation'));
-    const skillsIdx = headers.findIndex(h => h.includes('skill') || h.includes('tools') || h.includes('tech'));
-    const summaryIdx = headers.findIndex(h => h.includes('summary') || h.includes('highlight') || h.includes('about'));
+    const experienceIdx = headers.findIndex(h => h.includes('experience') || h.includes('years') || h.includes('seniority') || h.includes('level'));
+    const salaryIdx = headers.findIndex(h => h.includes('salary') || h.includes('rate') || h.includes('compensation') || h.includes('budget') || h.includes('cost') || h.includes('price') || h.includes('monthly'));
+    const skillsIdx = headers.findIndex(h => h.includes('skill') || h.includes('tools') || h.includes('tech') || h.includes('stack') || h.includes('competenc') || h.includes('expertise'));
+    const summaryIdx = headers.findIndex(h => h.includes('summary') || h.includes('highlight') || h.includes('about') || h.includes('bio') || h.includes('description') || h.includes('notes') || h.includes('profile'));
 
     candidates = [];
 
@@ -873,7 +873,9 @@ async function pullFromSheet() {
 
     updateCandidateList();
     const filters = [filterCompany && `company: "${filterCompany}"`, filterBatch && `batch: ${filterBatch}`, filterTitle && `title: "${filterTitle}"`].filter(Boolean).join(', ') || 'no filters';
-    const cols = [nameIdx >= 0 && 'name', companyIdx >= 0 && 'company', batchIdx >= 0 && 'batch', titleIdx >= 0 && 'title', resumeIdx >= 0 && 'resume', videoIdx >= 0 && 'video', tapIdx >= 0 && 'TAP'].filter(Boolean).join(', ');
+    const cols = [nameIdx >= 0 && 'name', companyIdx >= 0 && 'company', batchIdx >= 0 && 'batch', titleIdx >= 0 && 'title', locationIdx >= 0 && 'location', experienceIdx >= 0 && 'experience', salaryIdx >= 0 && 'salary', skillsIdx >= 0 && 'skills', resumeIdx >= 0 && 'resume', videoIdx >= 0 && 'video', tapIdx >= 0 && 'TAP', summaryIdx >= 0 && 'summary'].filter(Boolean).join(', ');
+    console.log('Sheet headers:', headers.join(' | '));
+    console.log('Matched columns:', cols);
     showStatus('success', `Found ${candidates.length} candidate${candidates.length !== 1 ? 's' : ''} (${filters}). Columns detected: ${cols}.`);
 
   } catch (err) {
