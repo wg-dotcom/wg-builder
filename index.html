@@ -1471,23 +1471,14 @@ function generateComparisonTable(cands, v) {
         </thead>
         <tbody>
           <tr><td><strong>Location</strong></td>${cands.map(c => `<td>${escHTML(c.location || 'TBD')}</td>`).join('')}</tr>
-          <tr><td><strong>Experience</strong></td>${cands.map(c => {
-            const exp = c.experience || (c.resumeData?.experience?.length ? c.resumeData.experience.map(e => e.role + ' @ ' + e.company).join(', ') : '') || 'TBD';
-            return `<td>${escHTML(exp)}</td>`;
-          }).join('')}</tr>
+          <tr><td><strong>Experience</strong></td>${cands.map(c => `<td>${escHTML(c.experience || (c.resumeData?.experience?.[0]?.role || '') || 'TBD')}</td>`).join('')}</tr>
           <tr><td><strong>Key Skills</strong></td>${cands.map(c => {
-            const sk = c.skills || (c.resumeData?.skillCategories?.length ? c.resumeData.skillCategories.map(s => s.skills).join(', ') : '') || 'TBD';
-            // Truncate long skill lists for table readability
-            const short = sk.length > 80 ? sk.slice(0, 77) + '...' : sk;
-            return `<td>${escHTML(short)}</td>`;
+            const sk = c.skills || (c.resumeData?.skillCategories?.[0]?.skills || '');
+            const top3 = sk.split(',').slice(0, 3).map(s => s.trim()).filter(Boolean).join(', ');
+            return '<td>' + escHTML(top3 || 'TBD') + '</td>';
           }).join('')}</tr>
-          <tr><td><strong>Monthly Rate</strong></td>${cands.map(c => `<td>${escHTML(c.salary || v.salaryRange || 'TBD')}</td>`).join('')}</tr>
-          <tr><td><strong>TAP Certified</strong></td>${cands.map(c => `<td>${c.tap ? '<span style="color:var(--primary);font-weight:700;">Yes ★</span>' : 'No'}</td>`).join('')}</tr>
-          <tr><td><strong>Recruiter's Take</strong></td>${cands.map(c => {
-            const note = c.recruiterNote || '';
-            const short = note.length > 120 ? note.slice(0, 117) + '...' : note;
-            return `<td style="font-size:12px;color:var(--text-mid);line-height:1.5;font-style:italic;">${escHTML(short || 'TBD')}</td>`;
-          }).join('')}</tr>
+          <tr><td><strong>Rate</strong></td>${cands.map(c => `<td>${escHTML(c.salary || v.salaryRange || 'TBD')}</td>`).join('')}</tr>
+          <tr><td><strong>TAP</strong></td>${cands.map(c => `<td>${c.tap ? '<span style="color:var(--primary);font-weight:700;">Yes ★</span>' : 'No'}</td>`).join('')}</tr>
         </tbody>
       </table>
     </div>
