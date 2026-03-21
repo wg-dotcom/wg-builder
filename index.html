@@ -1300,11 +1300,13 @@ function generateCandidateCard(c, idx, v) {
         ${c.summary ? `
         <div class="card-section">
           <div class="card-section-title">Why ${escHTML(firstName)}</div>
-          ${c.summary.includes('\n') ? `
           <ul class="strength-list">
-            ${c.summary.split('\n').filter(s => s.trim()).map(s => `<li>${escHTML(s.replace(/^[-•*]\s*/, ''))}</li>`).join('')}
-          </ul>` : `
-          <p style="font-size:14px;color:var(--text-mid);line-height:1.7;">${escHTML(c.summary)}</p>`}
+            ${(() => {
+              let bullets = c.summary.split('\n').filter(s => s.trim());
+              if (bullets.length <= 1) bullets = c.summary.split(/(?<=\.)\s+/).filter(s => s.trim() && s.length > 10);
+              return bullets.slice(0, 5).map(s => `<li>${escHTML(s.replace(/^[-•*]\s*/, '').trim())}</li>`).join('');
+            })()}
+          </ul>
         </div>` : ''}
       </div>
 
@@ -1771,9 +1773,9 @@ async function generateAINotes() {
 
   for (let i = 0; i < candidates.length; i++) {
     const c = candidates[i];
-    // Delay between candidates (8b-instant has higher rate limits, 8s is safe)
+    // Delay between candidates (Groq free tier: 6K tokens/min, ~1300 tokens/candidate = 15s safe)
     if (i > 0) {
-      const delay = 8;
+      const delay = 15;
       for (let s = delay; s > 0; s--) {
         showAIStatus('loading', `Writing notes for ${c.name} in ${s}s (${i + 1}/${candidates.length})...`);
         await new Promise(r => setTimeout(r, 1000));
@@ -1836,6 +1838,8 @@ Note: "Andrea is the operator mindset pick. She doesn't wait for instructions. S
 
 DIFFERENTIATION RULE: Each candidate MUST have a unique angle in their note. Use a DIFFERENT sommelier phrase for each. Candidate #1 might be "the safe bet", #2 "the force multiplier", #3 "the Swiss Army knife", #4 "the calculated risk worth taking". NEVER repeat the same framing across candidates. Each note should answer a DIFFERENT question: one about reliability, one about upside, one about culture fit, one about technical depth, one about value.
 
+KEEP IT TIGHT: "why" = exactly 3-5 short bullets separated by \\n. "note" = 2-3 sentences MAX (under 60 words total). No rambling.
+
 Return ONLY valid JSON. No markdown fences. No explanation before or after. Fill in REAL content for this candidate, do NOT use placeholder text.
 {"why":"Heavily certified Microsoft specialist: AZ-900, MS-900, AZ-104 in progress\\nLives in the exact DIS environment: remote ticket management, M365 admin daily\\nHandles 50+ tickets/week at current MSP. The bread-and-butter issues eating your time\\n4 years IT support across 2 MSPs. Knows the pace and the tools\\nStrong communicator. Clients at current role rate him 4.8/5 satisfaction","note":"Menard is the sleep easy at night hire in this batch. MSP background means he knows the pace, the tools, the client expectations. Minimal ramp-up. Solid all-rounder who can carry the load from day one.","experience":"4 yrs IT Support","skills":"Azure, M365, ServiceNow, Active Directory, PowerShell, ITIL","jobs":[{"role":"Service Desk Engineer","company":"Datacom MSP","dates":"Mar 2023 - Present"},{"role":"IT Support Specialist","company":"TechCorp SA","dates":"Jan 2021 - Feb 2023"}]}
 
@@ -1845,7 +1849,7 @@ IMPORTANT: The example above is just a FORMAT reference. Write COMPLETELY NEW co
       for (let attempt = 0; attempt < 3 && !parsed; attempt++) {
         try {
           if (attempt > 0) showAIStatus('loading', `Retry ${attempt} for ${c.name}...`);
-          const text = await callAI(prompt, 1000);
+          const text = await callAI(prompt, 500);
           let jsonStr = text;
           // Strip markdown code fences (any format)
           jsonStr = jsonStr.replace(/^[\s\S]*?```(?:json)?\s*\n?/i, '').replace(/\n?\s*```[\s\S]*$/, '');
@@ -1883,7 +1887,7 @@ IMPORTANT: The example above is just a FORMAT reference. Write COMPLETELY NEW co
       }
       if (parsed) {
         if (parsed.why) c.summary = parsed.why;
-        if (parsed.note) c.recruiterNote = parsed.note;
+        if (parsed.note) c.recruiterNote = parsed.note.length > 400 ? parsed.note.slice(0, 400).replace(/\s+\S*$/, '...') : parsed.note;
         if (parsed.experience) c.experience = parsed.experience;
         if (parsed.skills) c.skills = parsed.skills;
         if (parsed.jobs && Array.isArray(parsed.jobs)) {
