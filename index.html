@@ -1710,8 +1710,8 @@ async function generateAINotes() {
 
   for (let i = 0; i < candidates.length; i++) {
     const c = candidates[i];
-    // Delay between candidates to avoid rate limits (Groq free tier: 30 req/min)
-    if (i > 0) await new Promise(r => setTimeout(r, 2500));
+    // Delay between candidates to avoid rate limits (Groq free tier: 30 req/min, 6K tokens/min)
+    if (i > 0) await new Promise(r => setTimeout(r, 4000));
     showAIStatus('loading', `Writing notes for ${c.name} (${i + 1}/${candidates.length})...`);
 
     try {
@@ -1826,7 +1826,7 @@ Return ONLY valid JSON. No markdown, no code fences.
           }
         } catch(retryErr) {
           console.error('Attempt ' + (attempt+1) + ' failed for ' + c.name + ':', retryErr.message);
-          if (attempt < 2) await new Promise(r => setTimeout(r, 3000)); // Wait before retry
+          if (attempt < 2) await new Promise(r => setTimeout(r, 5000)); // Wait before retry (rate limit buffer)
         }
       }
       if (parsed) {
