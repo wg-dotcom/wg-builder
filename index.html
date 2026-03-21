@@ -1173,7 +1173,7 @@ function buildPresentationHTML() {
 
   <div class="section-label">
     <h2>Candidate Profiles</h2>
-    <p>Click "Resume" for the full profile or "Intro Video" to hear directly from each candidate.</p>
+    <p>Each candidate has been carefully selected and evaluated for this role.</p>
   </div>
 
   <div class="candidates">
@@ -1285,8 +1285,6 @@ function generateComparisonTable(cands, v) {
           <tr><td><strong>Key Skills</strong></td>${cands.map(c => `<td>${escHTML(c.skills || 'TBD')}</td>`).join('')}</tr>
           <tr><td><strong>Monthly Rate</strong></td>${cands.map(c => `<td>${escHTML(c.salary || v.salaryRange || 'TBD')}</td>`).join('')}</tr>
           <tr><td><strong>TAP Certified</strong></td>${cands.map(c => `<td>${c.tap ? '<span style="color:var(--primary);font-weight:700;">Yes ★</span>' : 'No'}</td>`).join('')}</tr>
-          <tr><td><strong>Intro Video</strong></td>${cands.map(c => `<td>${c.videoLink ? '<span style="color:var(--primary);font-weight:600;">Available</span>' : '—'}</td>`).join('')}</tr>
-          <tr><td><strong>Resume</strong></td>${cands.map(c => `<td>${c.resumeLink ? '<span style="color:var(--primary);font-weight:600;">Available</span>' : '—'}</td>`).join('')}</tr>
         </tbody>
       </table>
     </div>
