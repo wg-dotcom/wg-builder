@@ -1029,7 +1029,7 @@ function buildPresentationHTML() {
     .header-brand img { height: 32px; width: auto; }
     .header-divider { width: 1px; height: 28px; background: rgba(255,255,255,0.2); }
     .header-title { font-family: var(--font-heading); font-weight: 600; font-size: 14px; color: rgba(255,255,255,0.7); letter-spacing: 0.03em; }
-    .header-sagan { display: flex; align-items: center; gap: 8px; font-family: var(--font-heading); font-size: 12px; font-weight: 500; color: rgba(255,255,255,0.45); letter-spacing: 0.03em; text-transform: uppercase; }
+    .header-sagan { display: flex; align-items: center; gap: 8px; font-family: var(--font-heading); font-size: 12px; font-weight: 600; color: rgba(255,255,255,0.75); letter-spacing: 0.03em; text-transform: uppercase; }
 
     .hero { background: linear-gradient(145deg, var(--dark) 0%, var(--primary-deeper) 40%, var(--primary) 100%); color: var(--white); padding: 72px 32px 64px; text-align: center; position: relative; overflow: hidden; }
     .hero::before { content: ''; position: absolute; top: -50%; right: -20%; width: 600px; height: 600px; background: radial-gradient(circle, ${v.colorHighlight}1a 0%, transparent 70%); border-radius: 50%; }
@@ -1148,11 +1148,11 @@ function buildPresentationHTML() {
       <a class="header-brand" href="${escHTML(v.clientUrl)}" target="_blank">
         ${v.logoUrl ? `<img src="${escHTML(v.logoUrl)}" alt="${escHTML(v.clientName)}" style="height:28px;" />` : `<span style="font-weight:700;">${escHTML(v.clientName)}</span>`}
         <div class="header-divider"></div>
-        <span class="header-title">Talent Presentation</span>
+        <span class="header-title">${escHTML(v.clientName)}</span>
       </a>
       <div class="header-sagan">
         <span>Powered by</span>
-        <img src="https://saganrecruitment.com/wp-content/uploads/2025/10/Sagan-Logo-2-e1759568299542.png" alt="Sagan" style="height:16px;opacity:0.7;" />
+        <img src="https://saganrecruitment.com/wp-content/uploads/2025/10/Sagan-Logo-2-e1759568299542.png" alt="Sagan" style="height:20px;opacity:0.9;" />
       </div>
     </div>
   </div>
