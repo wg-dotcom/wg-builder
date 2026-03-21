@@ -1766,14 +1766,18 @@ Solves: "He handles the bread-and-butter issues that are eating your senior engi
 
 Notice: specific tools named, client's world referenced directly, pain points addressed concretely, comparative language ("strongest", "most cost-effective"), honest about trade-offs ("lighter experience but..."), sommelier descriptors woven in naturally at the end or middle, never as a list.
 
-GENERATE TWO SECTIONS as JSON:
+GENERATE FOUR SECTIONS as JSON:
 
 1. "why": 3-5 bullet points for "Why [First Name]". Each bullet starts with a concrete skill, tool, or achievement. Map it to what the client actually needs. Reference specific tools by name. If there's a gap, be honest but frame it constructively. Weave in 1-2 sommelier descriptors naturally. Separate bullets with \\n.
 
 2. "note": 2-3 sentences as Recruiter's Note. Position this candidate relative to the batch. What's their angle? What pain point do they solve? Is the salary worth it? End or close with a sommelier-style read on the candidate (one phrase, not a paragraph). Direct and honest. Sound like Jesus writing fast, not a recruitment brochure.
 
+3. "experience": A SHORT label for the comparison table. Example: "8 yrs full-stack" or "5 yrs ops + MSP" or "3 yrs customer success". Max 20 characters. Infer from resume/notes.
+
+4. "skills": Top 3-4 skills for the comparison table, comma separated. Example: "Django, React, AWS, PostgreSQL". Pick the most relevant to this role. Max 40 characters total.
+
 Return ONLY valid JSON. No markdown, no code fences.
-{"why": "bullet 1\\nbullet 2\\nbullet 3", "note": "the note"}`;
+{"why": "bullet 1\\nbullet 2\\nbullet 3", "note": "the note", "experience": "X yrs role", "skills": "Skill1, Skill2, Skill3"}`;
 
       let parsed = null;
       for (let attempt = 0; attempt < 3 && !parsed; attempt++) {
@@ -1814,6 +1818,8 @@ Return ONLY valid JSON. No markdown, no code fences.
       if (parsed) {
         if (parsed.why) c.summary = parsed.why;
         if (parsed.note) c.recruiterNote = parsed.note;
+        if (parsed.experience) c.experience = parsed.experience;
+        if (parsed.skills) c.skills = parsed.skills;
         successCount++;
       }
 
