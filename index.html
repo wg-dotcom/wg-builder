@@ -1838,7 +1838,7 @@ Note: "Andrea is the operator mindset pick. She doesn't wait for instructions. S
 
 DIFFERENTIATION RULE: Each candidate MUST have a unique angle in their note. Use a DIFFERENT sommelier phrase for each. Candidate #1 might be "the safe bet", #2 "the force multiplier", #3 "the Swiss Army knife", #4 "the calculated risk worth taking". NEVER repeat the same framing across candidates. Each note should answer a DIFFERENT question: one about reliability, one about upside, one about culture fit, one about technical depth, one about value.
 
-KEEP IT TIGHT: "why" = exactly 3-5 short bullets separated by \\n. "note" = 2-3 sentences MAX (under 60 words total). No rambling.
+KEEP IT TIGHT: "why" = exactly 3-5 SHORT bullets separated by \\n. Each bullet is ONE line, max 15 words. Start with a specific fact (tool, number, cert). "note" = 2-3 sentences MAX (under 60 words). No rambling. No filler.
 
 Return ONLY valid JSON. No markdown fences. No explanation before or after. Fill in REAL content for this candidate, do NOT use placeholder text.
 {"why":"Heavily certified Microsoft specialist: AZ-900, MS-900, AZ-104 in progress\\nLives in the exact DIS environment: remote ticket management, M365 admin daily\\nHandles 50+ tickets/week at current MSP. The bread-and-butter issues eating your time\\n4 years IT support across 2 MSPs. Knows the pace and the tools\\nStrong communicator. Clients at current role rate him 4.8/5 satisfaction","note":"Menard is the sleep easy at night hire in this batch. MSP background means he knows the pace, the tools, the client expectations. Minimal ramp-up. Solid all-rounder who can carry the load from day one.","experience":"4 yrs IT Support","skills":"Azure, M365, ServiceNow, Active Directory, PowerShell, ITIL","jobs":[{"role":"Service Desk Engineer","company":"Datacom MSP","dates":"Mar 2023 - Present"},{"role":"IT Support Specialist","company":"TechCorp SA","dates":"Jan 2021 - Feb 2023"}]}
@@ -1886,7 +1886,13 @@ IMPORTANT: The example above is just a FORMAT reference. Write COMPLETELY NEW co
         }
       }
       if (parsed) {
-        if (parsed.why) c.summary = parsed.why;
+        if (parsed.why) {
+          // Cap each bullet to ~120 chars, max 5 bullets
+          c.summary = parsed.why.split('\n').filter(s => s.trim()).slice(0, 5)
+            .map(s => s.replace(/^[-•*]\s*/, '').trim())
+            .map(s => s.length > 120 ? s.slice(0, 120).replace(/\s+\S*$/, '...') : s)
+            .join('\n');
+        }
         if (parsed.note) c.recruiterNote = parsed.note.length > 400 ? parsed.note.slice(0, 400).replace(/\s+\S*$/, '...') : parsed.note;
         if (parsed.experience) c.experience = parsed.experience;
         if (parsed.skills) c.skills = parsed.skills;
