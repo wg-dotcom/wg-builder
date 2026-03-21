@@ -1068,11 +1068,19 @@ function buildPresentationHTML() {
     .tap-badge { display: inline-flex; align-items: center; gap: 5px; background: linear-gradient(135deg, #f59e0b, #d97706); color: white; padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: 700; letter-spacing: 0.04em; }
 
     .tags-row { padding: 0 28px 16px; display: flex; flex-wrap: wrap; gap: 6px; }
-    .tag { display: inline-block; padding: 4px 12px; border-radius: 100px; font-size: 12px; font-weight: 600; background: var(--tag-bg); color: var(--tag-color); }
+    .tag { display: inline-block; padding: 5px 14px; border-radius: 100px; font-size: 12px; font-weight: 600; }
+    .tag-filled { background: var(--tag-bg); color: var(--tag-color); }
+    .tag-filled:nth-child(3) { background: var(--highlight); color: var(--dark); }
+    .tag-outlined { background: transparent; color: var(--text-mid); border: 1.5px solid #ddd; }
 
     .card-body { padding: 0 28px 20px; }
-    .card-section { margin-bottom: 16px; }
-    .card-section-title { font-family: var(--font-heading); font-size: 13px; font-weight: 700; color: var(--text-dark); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 10px; padding-bottom: 6px; border-bottom: 1px solid #f0f0f0; }
+    .card-body-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; border-top: 1px solid #f0f0f0; padding-top: 20px; margin: 0 28px 20px; padding-left: 0; padding-right: 0; }
+    .card-section { margin-bottom: 0; }
+    .card-section-title { font-family: var(--font-heading); font-size: 13px; font-weight: 700; color: var(--primary); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 14px; }
+    .experience-list { display: flex; flex-direction: column; gap: 14px; }
+    .exp-entry .exp-role { font-weight: 700; font-size: 14px; color: var(--text-dark); }
+    .exp-entry .exp-company { font-size: 13px; color: var(--primary); font-weight: 500; }
+    .exp-entry .exp-dates { font-size: 12px; color: var(--text-light); margin-top: 2px; }
 
     .experience-item { display: flex; justify-content: space-between; align-items: baseline; padding: 6px 0; border-bottom: 1px solid #f8f8f8; }
     .exp-role { font-size: 14px; font-weight: 600; color: var(--text-dark); }
@@ -1127,6 +1135,7 @@ function buildPresentationHTML() {
     @media (max-width: 768px) {
       .hero { padding: 48px 20px 40px; }
       .card-header { flex-direction: column; }
+      .card-body-grid { grid-template-columns: 1fr; }
       .advisor-card { flex-direction: column; text-align: center; }
       .comparison-table { font-size: 11px; }
     }
@@ -1224,6 +1233,18 @@ function buildPresentationHTML() {
 function generateCandidateCard(c, idx, v) {
   const skills = c.skills ? c.skills.split(',').map(s => s.trim()).filter(Boolean) : [];
   const tapBadge = c.tap ? '<span class="tap-badge">★ TAP Certified</span>' : '';
+  const firstName = c.name.split(' ')[0];
+
+  // Split skills: first 5 filled, rest outlined
+  const filledSkills = skills.slice(0, 5);
+  const outlinedSkills = skills.slice(5);
+
+  // Parse experience entries from resumeData
+  const expEntries = c.resumeData?.experience?.length ? c.resumeData.experience.slice(0, 4) : [];
+
+  // Education from resumeData
+  const education = c.resumeData?.education?.[0];
+  const eduText = education ? `${education.degree}${education.school ? ' · ' + education.school : ''}` : '';
 
   return `
     <article class="card" id="candidate-${idx}">
@@ -1233,29 +1254,46 @@ function generateCandidateCard(c, idx, v) {
           <div class="card-name">${escHTML(c.name)} ${tapBadge}</div>
           <div class="card-meta-row">
             ${c.location ? `<div class="card-meta-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>${escHTML(c.location)}</div>` : ''}
-            ${c.experience ? `<div class="card-meta-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg><strong>${escHTML(c.experience)}</strong></div>` : ''}
+            ${c.experience ? `<div class="card-meta-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg><strong>${escHTML(c.experience)}</strong> experience</div>` : ''}
+            ${eduText ? `<div class="card-meta-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c0 2 3 3 6 3s6-1 6-3v-5"/></svg>${escHTML(eduText)}</div>` : ''}
           </div>
         </div>
       </div>
 
-      ${skills.length ? `<div class="tags-row">${skills.map(s => `<span class="tag">${escHTML(s)}</span>`).join('')}</div>` : ''}
+      ${skills.length ? `<div class="tags-row">
+        ${filledSkills.map(s => `<span class="tag tag-filled">${escHTML(s)}</span>`).join('')}
+        ${outlinedSkills.map(s => `<span class="tag tag-outlined">${escHTML(s)}</span>`).join('')}
+      </div>` : ''}
 
-      ${c.summary ? `
-      <div class="card-body">
+      <div class="card-body card-body-grid">
+        ${expEntries.length ? `
         <div class="card-section">
-          <div class="card-section-title">Why ${escHTML(c.name.split(' ')[0])}</div>
+          <div class="card-section-title">Key Experience</div>
+          <div class="experience-list">
+            ${expEntries.map(exp => `
+            <div class="exp-entry">
+              <div class="exp-role">${escHTML(exp.role)}</div>
+              <div class="exp-company">${escHTML(exp.company)}</div>
+              <div class="exp-dates">${escHTML(exp.dates || '')}</div>
+            </div>`).join('')}
+          </div>
+        </div>` : ''}
+
+        ${c.summary ? `
+        <div class="card-section">
+          <div class="card-section-title">Why ${escHTML(firstName)}</div>
           ${c.summary.includes('\n') ? `
           <ul class="strength-list">
             ${c.summary.split('\n').filter(s => s.trim()).map(s => `<li>${escHTML(s.replace(/^[-•*]\s*/, ''))}</li>`).join('')}
           </ul>` : `
           <p style="font-size:14px;color:var(--text-mid);line-height:1.7;">${escHTML(c.summary)}</p>`}
-        </div>
-      </div>` : ''}
+        </div>` : ''}
+      </div>
 
       <div class="card-footer">
         <div class="footer-note"><strong>${escHTML(c.salary || v.salaryRange || 'TBD')}</strong> &middot; ${escHTML(v.schedule)}</div>
         <div class="btn-group">
-          <a class="btn-card btn-outline" href="resume-${c.name.split(' ')[0].toLowerCase().replace(/[^a-z0-9]/g, '')}.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Resume</a>
+          <a class="btn-card btn-outline" href="resume-${firstName.toLowerCase().replace(/[^a-z0-9]/g, '')}.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Resume</a>
           ${c.videoLink ? `<a class="btn-card btn-primary-card" href="${escHTML(c.videoLink)}" target="_blank"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>Intro Video</a>` : ''}
           ${c.tap ? `<a class="btn-card btn-tap" href="https://drive.google.com/file/d/1lvb0EWiOoIzbKKFGXN0IiuDjdGYOZdHC/view" target="_blank"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>TAP Info</a>` : ''}
         </div>
@@ -1268,7 +1306,7 @@ function generateCandidateCard(c, idx, v) {
       </div>` : `
       <div class="card-recruiter-note">
         <div class="recruiter-note-title">Recruiter's Note</div>
-        <p>${escHTML(c.name.split(' ')[0])} brings a strong profile aligned with the ${escHTML(v.roleTitle)} position at ${escHTML(v.clientName)}. ${c.experience ? 'With ' + escHTML(c.experience) + ' of experience, they' : 'They'} offer the skills and background needed to make an immediate impact.</p>
+        <p>${escHTML(firstName)} brings a strong profile aligned with the ${escHTML(v.roleTitle)} position at ${escHTML(v.clientName)}. ${c.experience ? 'With ' + escHTML(c.experience) + ' of experience, they' : 'They'} offer the skills and background needed to make an immediate impact.</p>
       </div>`}
     </article>`;
 }
@@ -1779,7 +1817,7 @@ Why bullets:
 Note: "Andrea is the operator mindset pick. She doesn't wait for instructions. She builds the playbook. At her current company she cut response times 40% by redesigning the dispatch workflow. Built for the long haul. The kind of hire you talk about years later."
 
 Return ONLY valid JSON. No markdown fences. No explanation before or after.
-{"why":"bullet 1\\nbullet 2\\nbullet 3","note":"2-4 sentences. Position vs batch. Sommelier flair. Honest.","experience":"X yrs [specific role] (max 20 chars)","skills":"Tool1, Tool2, Tool3 (max 40 chars)"}`;
+{"why":"bullet 1\\nbullet 2\\nbullet 3\\nbullet 4\\nbullet 5","note":"2-4 sentences. Position vs batch. Sommelier flair. Honest.","experience":"X yrs [specific role] (max 20 chars)","skills":"Tool1, Tool2, Tool3, Tool4, Tool5, Tool6, Tool7, Tool8 (list 6-8 key tools/skills)","jobs":[{"role":"Job Title","company":"Company Name","dates":"Mon YYYY - Present"},{"role":"Previous Role","company":"Company","dates":"Mon YYYY - Mon YYYY"}]}`;
 
       let parsed = null;
       for (let attempt = 0; attempt < 3 && !parsed; attempt++) {
@@ -1826,6 +1864,14 @@ Return ONLY valid JSON. No markdown fences. No explanation before or after.
         if (parsed.note) c.recruiterNote = parsed.note;
         if (parsed.experience) c.experience = parsed.experience;
         if (parsed.skills) c.skills = parsed.skills;
+        if (parsed.jobs && Array.isArray(parsed.jobs)) {
+          if (!c.resumeData) c.resumeData = {};
+          c.resumeData.experience = parsed.jobs.map(j => ({
+            role: j.role || '',
+            company: j.company || '',
+            dates: j.dates || ''
+          }));
+        }
         successCount++;
       }
 
