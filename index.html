@@ -732,9 +732,11 @@ function updateFilterPreview() {
 // ═══════════════════════════════════════════════════════════════
 function fetchSheetViaJSONP(sheetId) {
   return new Promise((resolve, reject) => {
+    // Google ignores responseHandler on some sheets, so we intercept setResponse directly
     const callbackName = 'sheetCallback_' + Date.now();
     const timeout = setTimeout(() => {
       delete window[callbackName];
+      if (window._gvizInterceptResolve) delete window._gvizInterceptResolve;
       script.remove();
       reject(new Error('Sheet request timed out'));
     }, 15000);
@@ -744,13 +746,11 @@ function fetchSheetViaJSONP(sheetId) {
       const table = response.table;
       const headers = table.cols.map(c => c.label || '');
       const allEmpty = headers.every(h => !h.trim());
-      // Convert all data rows
       const dataRows = table.rows.map(r =>
         r.c.map(cell => cell ? (cell.v !== null && cell.v !== undefined ? String(cell.v) : '') : '')
       );
       let rows;
       if (allEmpty) {
-        // Headers are empty: first data row IS the header row
         rows = dataRows;
       } else {
         rows = [headers, ...dataRows];
@@ -758,12 +758,21 @@ function fetchSheetViaJSONP(sheetId) {
       resolve(rows);
     }
 
-    window[callbackName] = function(response) {
+    function handleResponse(response) {
       clearTimeout(timeout);
       delete window[callbackName];
       script.remove();
       try { parseTable(response); } catch(e) { reject(e); }
-    };
+    }
+
+    // Method 1: Custom callback name
+    window[callbackName] = handleResponse;
+
+    // Method 2: Intercept google.visualization.Query.setResponse (Google's default)
+    if (!window.google) window.google = {};
+    if (!window.google.visualization) window.google.visualization = {};
+    if (!window.google.visualization.Query) window.google.visualization.Query = {};
+    window.google.visualization.Query.setResponse = handleResponse;
 
     const script = document.createElement('script');
     script.src = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:json;responseHandler=${callbackName}`;
