@@ -1760,28 +1760,46 @@ GENERATE TWO SECTIONS as JSON:
 Return ONLY valid JSON. No markdown, no code fences.
 {"why": "bullet 1\\nbullet 2\\nbullet 3", "note": "the note"}`;
 
-      const text = await callAI(prompt, 1000);
-
-      // Robust JSON parsing — handle markdown, extra text, truncation
-      let jsonStr = text;
-      // Strip markdown code fences (any format)
-      jsonStr = jsonStr.replace(/^[\s\S]*?```(?:json)?\s*\n?/i, '').replace(/\n?\s*```[\s\S]*$/, '');
-      // If still no leading {, extract JSON object from anywhere in the text
-      if (!jsonStr.trim().startsWith('{')) {
-        const match = jsonStr.match(/\{[\s\S]*\}/);
-        if (match) jsonStr = match[0];
+      let parsed = null;
+      for (let attempt = 0; attempt < 3 && !parsed; attempt++) {
+        try {
+          if (attempt > 0) showAIStatus('loading', `Retry ${attempt} for ${c.name}...`);
+          const text = await callAI(prompt, 1000);
+          let jsonStr = text;
+          // Strip markdown code fences (any format)
+          jsonStr = jsonStr.replace(/^[\s\S]*?```(?:json)?\s*\n?/i, '').replace(/\n?\s*```[\s\S]*$/, '');
+          // Extract JSON object from anywhere in the text
+          if (!jsonStr.trim().startsWith('{')) {
+            const match = jsonStr.match(/\{[\s\S]*\}/);
+            if (match) jsonStr = match[0];
+          }
+          jsonStr = jsonStr.trim();
+          // Fix common issues: escaped newlines inside strings
+          jsonStr = jsonStr.replace(/\n/g, '\\n');
+          // Fix truncated JSON
+          if (!jsonStr.endsWith('}')) {
+            if (jsonStr.match(/"[^"]*$/)) jsonStr += '"';
+            if (!jsonStr.endsWith('}')) jsonStr += '}';
+          }
+          // Try to extract "why" and "note" with regex as last resort
+          try {
+            parsed = JSON.parse(jsonStr);
+          } catch(pe) {
+            const whyMatch = text.match(/"why"\s*:\s*"([\s\S]*?)(?:"\s*,\s*"note|"\s*})/);
+            const noteMatch = text.match(/"note"\s*:\s*"([\s\S]*?)"\s*}/);
+            if (whyMatch || noteMatch) {
+              parsed = { why: whyMatch ? whyMatch[1] : '', note: noteMatch ? noteMatch[1] : '' };
+            } else { throw pe; }
+          }
+        } catch(retryErr) {
+          if (attempt === 2) console.error('AI notes failed after 3 attempts for ' + c.name + ':', retryErr);
+        }
       }
-      // Fix truncated JSON: ensure closing brace and quote
-      jsonStr = jsonStr.trim();
-      if (!jsonStr.endsWith('}')) {
-        // Likely truncated mid-string. Close the string and object.
-        if (jsonStr.match(/"[^"]*$/)) jsonStr += '"';
-        if (!jsonStr.endsWith('}')) jsonStr += '}';
+      if (parsed) {
+        if (parsed.why) c.summary = parsed.why;
+        if (parsed.note) c.recruiterNote = parsed.note;
+        successCount++;
       }
-      const parsed = JSON.parse(jsonStr);
-      if (parsed.why) c.summary = parsed.why;
-      if (parsed.note) c.recruiterNote = parsed.note;
-      successCount++;
 
     } catch (err) {
       console.error(`AI notes failed for ${c.name}:`, err);
