@@ -1515,7 +1515,7 @@ async function generateResumeData() {
 
   for (let i = 0; i < candidates.length; i++) {
     const c = candidates[i];
-    if (c.resumeData) continue;
+    if (c.resumeData?.fullExtract) continue; // Only skip if we already did the full extraction
 
     showAIStatus('loading', 'Building resume for ' + c.name + ' (' + (i + 1) + '/' + candidates.length + ')...');
 
@@ -1550,6 +1550,7 @@ async function generateResumeData() {
       jsonStr = jsonStr.trim();
       if (!jsonStr.endsWith('}')) { if (jsonStr.match(/"[^"]*$/)) jsonStr += '"'; if (!jsonStr.endsWith(']')) jsonStr += ']'; jsonStr += '}'; }
       c.resumeData = JSON.parse(jsonStr);
+      c.resumeData.fullExtract = true;
     } catch(err) {
       console.error('Resume data failed for ' + c.name + ':', err);
       c.resumeData = {
