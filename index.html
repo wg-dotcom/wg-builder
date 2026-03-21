@@ -1368,15 +1368,21 @@ function buildResumeHTML(c, v) {
   }
 
   // Parse experience entries from resumeData if available, otherwise use summary
-  const experienceSection = c.resumeData?.experience?.length ? c.resumeData.experience.map(exp => `
+  const experienceSection = c.resumeData?.experience?.length ? c.resumeData.experience.map(exp => {
+    const desc = exp.description || '';
+    const descHTML = desc.includes('\n')
+      ? '<ul class="exp-bullets">' + desc.split('\n').filter(s => s.trim()).map(s => '<li>' + escHTML(s.replace(/^[-•*]\s*/, '')) + '</li>').join('') + '</ul>'
+      : (desc ? '<p class="exp-desc">' + escHTML(desc) + '</p>' : '');
+    return `
     <div class="experience-item">
       <div class="exp-header">
         <div class="exp-role">${escHTML(exp.role)}</div>
         <div class="exp-company">${escHTML(exp.company)}</div>
         <div class="exp-meta">${escHTML(exp.dates || '')}</div>
       </div>
-      <div class="exp-desc">${escHTML(exp.description || '')}</div>
-    </div>`).join('') : '';
+      ${descHTML}
+    </div>`;
+  }).join('') : '';
 
   const educationSection = c.resumeData?.education?.length ? c.resumeData.education.map(edu => `
     <div class="education-item">
@@ -1452,6 +1458,8 @@ function buildResumeHTML(c, v) {
     .exp-company { font-size: 14px; font-weight: 500; color: var(--primary); }
     .exp-meta { font-size: 13px; color: var(--gray-400); margin-top: 2px; }
     .exp-desc { font-size: 14px; color: var(--gray-600); line-height: 1.65; }
+    .exp-bullets { font-size: 14px; color: var(--gray-600); line-height: 1.65; padding-left: 20px; margin-top: 6px; }
+    .exp-bullets li { margin-bottom: 4px; }
     .education-item, .cert-item, .lang-item { font-size: 15px; margin-bottom: 8px; }
     .edu-degree, .cert-name { font-weight: 600; color: var(--dark); }
     .edu-school { color: var(--primary); font-weight: 500; }
@@ -1512,17 +1520,28 @@ async function generateResumeData() {
     showAIStatus('loading', 'Building resume for ' + c.name + ' (' + (i + 1) + '/' + candidates.length + ')...');
 
     try {
-      const prompt = 'You are extracting structured resume data for a candidate to generate a branded resume page. Use ALL available information to build a comprehensive profile.\n\n' +
-        'CANDIDATE:\n' +
-        '- Name: ' + c.name + '\n' +
-        '- Role applying for: ' + v.roleTitle + '\n' +
-        '- Location: ' + (c.location || 'Not specified') + '\n' +
-        '- Experience: ' + (c.experience || 'Not specified') + '\n' +
-        '- Skills: ' + (c.skills || 'Not specified') + '\n' +
-        '- Summary/Notes: ' + (c.summary || 'Not specified') + '\n\n' +
-        'Generate a structured resume. Be specific and detailed. Use the skills and experience info to infer realistic work history if not explicitly provided.\n\n' +
-        'Return ONLY valid JSON:\n' +
-        '{"summary":"2-3 sentence professional summary","skillCategories":[{"category":"Category Name","skills":"Skill 1, Skill 2, Skill 3"}],"experience":[{"role":"Job Title","company":"Company Name","dates":"Year - Year","description":"Key accomplishments and responsibilities."}],"education":[{"degree":"Degree Name","school":"School Name","year":"Year"}],"certifications":["Cert Name"],"languages":[{"name":"Language","level":"Proficiency"}]}';
+      // Collect everything we know about this candidate
+      const allInfo = [
+        c.name ? 'Name: ' + c.name : '',
+        v.roleTitle ? 'Role: ' + v.roleTitle : '',
+        c.location ? 'Location: ' + c.location : '',
+        c.experience ? 'Experience: ' + c.experience : '',
+        c.skills ? 'Skills: ' + c.skills : '',
+        c.summary ? 'Why/Strengths:\n' + c.summary : '',
+        c.recruiterNote ? 'Recruiter note: ' + c.recruiterNote : '',
+        c.resumeData?.experience?.length ? 'Work history:\n' + c.resumeData.experience.map(e =>
+          (e.role || '') + ' at ' + (e.company || '') + ' (' + (e.dates || '') + ')' + (e.description ? ': ' + e.description : '')
+        ).join('\n') : ''
+      ].filter(Boolean).join('\n');
+
+      const prompt = 'TASK: Extract and structure a professional resume from the candidate data below. ' +
+        'ONLY use information that is explicitly stated or clearly implied. ' +
+        'NEVER fabricate, infer, or guess companies, roles, dates, schools, or certifications that are not mentioned. ' +
+        'If a section has no data, return an empty array for it. ' +
+        'For experience descriptions, use the strengths/notes to write 2-3 bullet points about what they did in each role. Keep it factual.\n\n' +
+        'CANDIDATE DATA:\n' + allInfo + '\n\n' +
+        'Return ONLY valid JSON (no markdown):\n' +
+        '{"summary":"2-3 sentence professional summary based on actual data","skillCategories":[{"category":"Category Name","skills":"Skill 1, Skill 2, Skill 3"}],"experience":[{"role":"Actual Job Title","company":"Actual Company","dates":"Actual dates","description":"What they actually did, based on notes. 2-3 bullet points separated by newlines."}],"education":[{"degree":"Degree","school":"School","year":"Year"}],"certifications":["Only real ones mentioned"],"languages":[{"name":"Language","level":"Level"}]}';
 
       const text = await callAI(prompt, 1200);
       let jsonStr = text;
