@@ -1715,84 +1715,33 @@ async function generateAINotes() {
 
   for (let i = 0; i < candidates.length; i++) {
     const c = candidates[i];
-    // Delay between candidates to avoid rate limits (Groq free tier: 30 req/min, 6K tokens/min)
-    if (i > 0) await new Promise(r => setTimeout(r, 4000));
-    showAIStatus('loading', `Writing notes for ${c.name} (${i + 1}/${candidates.length})...`);
+    // Delay between candidates (Groq free tier: 6K tokens/min, need ~15s between calls)
+    if (i > 0) await new Promise(r => setTimeout(r, 12000));
+    showAIStatus('loading', `Writing notes for ${c.name} (${i + 1}/${candidates.length})... ${i > 0 ? '(pacing for rate limits)' : ''}`);
 
     try {
-      // Get NotebookLM context if provided
       const notebookContext = document.getElementById('notebookContext')?.value?.trim() || '';
 
-      const prompt = `You are Jesus Pacheco, Head of White Glove Hirings at Sagan. You're writing candidate presentation notes for a premium client page. This goes directly to the client. It needs to feel like YOU wrote it, not an AI.
+      const prompt = `You write candidate notes as Jesus Pacheco (Sagan White Glove). Goes directly to client. Must sound human, not AI.
 
-YOUR WRITING RULES (non-negotiable):
-- Sound like a sharp person who types fast, not a document
-- Short sentences. Real rhythm. Some can run on a bit and that's fine.
-- NEVER use em dashes as connectors. Use periods, commas, colons.
-- NEVER use corporate jargon: "leveraging", "synergy", "best-in-class", "value-add", "strong profile", "immediate impact", "well-positioned", "comprehensive", "proven track record"
-- NEVER use passive voice
-- NEVER wrap up paragraphs neatly with a bow. Leave some roughness.
-- Lead with specifics: tool names, company names, numbers, concrete achievements
-- Story over specs. One specific detail beats five adjectives.
-- When something is impressive, say it once, directly. Don't oversell.
-- Use the CLIENT'S own language and terminology from their website. Mirror how they talk about their business.
-- Position candidates AGAINST EACH OTHER in the batch. Who is strongest at what. Be honest about trade-offs.
+RULES: Short sentences. No em dashes. No jargon (no "leveraging/synergy/best-in-class/proven track record"). Lead with specifics: tools, numbers, achievements. Be honest about trade-offs. Use 1-2 sommelier phrases naturally per candidate (e.g. "heavyweight", "built for the long haul", "sleep easy at night hire", "force multiplier", "thinks like an owner", "Swiss Army knife", "safe bet").
 
-THE SOMMELIER APPROACH (weave this in naturally, don't force it):
-You present candidates like a sommelier presents wine. Not just specs, but body, finish, complexity. Paint a three-dimensional picture of who they are, how they work, where they'll thrive. Use this vocabulary naturally when it fits:
-- Presence: "polished", "scrappy", "magnetic", "steady", "grounded", "the adult in the room", "brings the energy you wish everyone had"
-- Capability: "heavyweight", "nimble", "the whole package", "built for the long haul", "operates at a different level", "surprisingly well-rounded"
-- Working style: "thinks like an owner", "gets their hands dirty", "runs through walls", "finds the elegant solution", "ships, doesn't just plan", "doesn't need a playbook"
-- Impact: "creates momentum that outlasts their involvement", "builds systems, not dependencies", "solves problems that stay solved", "sets a new standard"
-- Special sauce: "builder DNA", "operator mindset", "Swiss Army knife", "force multiplier", "the hire that unlocks other hires"
-- Value: "investment-grade", "pays for themselves in 90 days", "high ROI relative to salary", "the necessity disguised as a luxury"
-- Risk: "safe bet", "the calculated risk worth taking", "all signal, some noise", "betting on trajectory over resume", "sleep easy at night hire"
-- Fit framing: "pairs beautifully with...", "built for [stage]", "thrives in [environment]"
-Pick 2-3 of these per candidate MAX. Don't list them. Weave them into the narrative so it reads as human insight, not a checklist.
+CLIENT: ${v.clientName} | Role: ${v.roleTitle} | Budget: ${v.salaryRange || '?'} | Schedule: ${v.schedule || 'Full-time, US hours'}
+Context: ${v.contextNotes || 'Not provided'}
+${clientSiteContext ? clientSiteContext.slice(0, 500) : ''}
+${notebookContext ? 'Research notes: ' + notebookContext.slice(0, 800) : ''}
 
-CLIENT:
-- Company: ${v.clientName}
-- Role: ${v.roleTitle}
-- Pain points, context, what they care about: ${v.contextNotes || 'Not provided'}
-- Budget: ${v.salaryRange || 'Not specified'}
-- Schedule: ${v.schedule || 'Full-time, US hours'}
-${clientSiteContext}
-${notebookContext ? `\nDEEP CONTEXT (from research notes, use this heavily for understanding the client, the role, and what matters):\n${notebookContext}` : ''}
+BATCH: ${allCandsSummary}
 
-ALL CANDIDATES IN THIS BATCH (for comparative positioning):
-${allCandsSummary}
+THIS CANDIDATE (#${i+1}/${candidates.length}):
+${c.name} | ${c.location || '?'} | ${c.salary || '?'}/mo | TAP: ${c.tap ? 'Yes' : 'No'}
+${c.experience ? 'Exp: ' + c.experience : ''} ${c.skills ? '| Skills: ' + c.skills : ''}
+${c.summary ? 'Notes: ' + c.summary.slice(0, 300) : ''}
 
-CANDIDATE TO WRITE ABOUT NOW (#${i+1} of ${candidates.length}):
-- Name: ${c.name}
-- Location: ${c.location || 'Not specified'}
-- Experience: ${c.experience || 'Not specified'}
-- Skills: ${c.skills || 'Not specified'}
-- Salary: ${c.salary || 'Not specified'}
-- TAP Certified: ${c.tap ? 'Yes' : 'No'}
+EXAMPLE NOTE STYLE: "Menard is a heavily certified Microsoft specialist working as a Service Desk Engineer at an MSP. He lives in the exact environment DIS operates in: remote ticket management, M365 admin, Active Directory troubleshooting. Handles the bread-and-butter issues eating your senior engineers' time. Minimal ramp-up needed. Sleep easy at night hire."
 
-REFERENCE EXAMPLES (match this quality and style exactly):
-
-Example 1 (Wingz recruiter note with sommelier touch):
-"Gildardo is your strongest Django-first match. Four consecutive full-stack roles all centered on Django + DRF, with hands-on React Native on every project. He has the exact stack you need: scalable REST APIs, PostgreSQL optimization, and AWS deployment. His track record in fully remote teams, owning features end-to-end, maps directly to how Wingz operates. At $4K/mo he sits at the top of your budget but brings the deepest technical alignment of the three. Heavyweight operator. Built for the long haul."
-
-Example 2 (DIS "Why He Fits" + "What He Solves"):
-Why: "Menard is a heavily certified Microsoft specialist currently working as a Service Desk Engineer at an MSP. He lives in the exact environment DIS operates in: remote ticket management, M365 tenant administration, and Active Directory troubleshooting. His day-to-day already mirrors the Technical Client Liaison role."
-Solves: "He handles the bread-and-butter issues that are eating your senior engineers' time: password resets, connectivity problems, Exchange Online configurations, printer issues. He does it through ConnectWise and Kaseya, tools your team already understands. Minimal ramp-up needed. Sleep easy at night hire."
-
-Notice: specific tools named, client's world referenced directly, pain points addressed concretely, comparative language ("strongest", "most cost-effective"), honest about trade-offs ("lighter experience but..."), sommelier descriptors woven in naturally at the end or middle, never as a list.
-
-GENERATE FOUR SECTIONS as JSON:
-
-1. "why": 3-5 bullet points for "Why [First Name]". Each bullet starts with a concrete skill, tool, or achievement. Map it to what the client actually needs. Reference specific tools by name. If there's a gap, be honest but frame it constructively. Weave in 1-2 sommelier descriptors naturally. Separate bullets with \\n.
-
-2. "note": 2-3 sentences as Recruiter's Note. Position this candidate relative to the batch. What's their angle? What pain point do they solve? Is the salary worth it? End or close with a sommelier-style read on the candidate (one phrase, not a paragraph). Direct and honest. Sound like Jesus writing fast, not a recruitment brochure.
-
-3. "experience": A SHORT label for the comparison table. Example: "8 yrs full-stack" or "5 yrs ops + MSP" or "3 yrs customer success". Max 20 characters. Infer from resume/notes.
-
-4. "skills": Top 3-4 skills for the comparison table, comma separated. Example: "Django, React, AWS, PostgreSQL". Pick the most relevant to this role. Max 40 characters total.
-
-Return ONLY valid JSON. No markdown, no code fences.
-{"why": "bullet 1\\nbullet 2\\nbullet 3", "note": "the note", "experience": "X yrs role", "skills": "Skill1, Skill2, Skill3"}`;
+Return ONLY JSON, no markdown:
+{"why":"bullet1\\nbullet2\\nbullet3","note":"2-3 sentences positioning vs batch","experience":"X yrs role (max 20 chars)","skills":"Tool1, Tool2, Tool3 (max 40 chars)"}`;
 
       let parsed = null;
       for (let attempt = 0; attempt < 3 && !parsed; attempt++) {
