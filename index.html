@@ -1071,6 +1071,15 @@ function buildPresentationHTML() {
     .batch-pill { display: inline-flex; align-items: center; gap: 10px; background: white; border: 1px solid var(--border); border-radius: 100px; padding: 8px 20px; font-size: 13px; color: var(--text-light); }
     .batch-num { font-weight: 700; color: var(--primary); }
 
+    .batch-switcher { display: flex; justify-content: center; align-items: center; gap: 8px; margin: 8px auto 36px; max-width: 800px; padding: 0 24px; }
+    .batch-switcher[data-count="1"] { display: none; }
+    .batch-btn { display: flex; align-items: center; gap: 8px; padding: 11px 22px; border: 2px solid var(--border); border-radius: 10px; background: white; font-family: var(--font-body); font-size: 14px; font-weight: 600; color: var(--text-light); cursor: pointer; transition: all 0.2s ease; }
+    .batch-btn:hover { border-color: var(--primary); color: var(--text-dark); }
+    .batch-btn.active { background: var(--dark); border-color: var(--dark); color: white; }
+    .batch-count { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 50%; background: var(--primary); color: white; font-size: 11px; font-weight: 700; }
+    .batch-btn.active .batch-count { background: var(--highlight); color: var(--dark); }
+    .batch-panel.hidden { display: none; }
+
     .section-label { text-align: center; padding: 24px 24px 28px; }
     .section-label h2 { font-family: var(--font-heading); font-size: 26px; font-weight: 800; color: var(--text-dark); margin-bottom: 6px; }
     .section-label p { font-size: 15px; color: var(--text-light); }
@@ -1217,11 +1226,19 @@ function buildPresentationHTML() {
     <p>Each candidate has been carefully selected and evaluated for this role.</p>
   </div>
 
-  <div class="candidates">
-    ${candidates.map((c, i) => generateCandidateCard(c, i, v)).join('')}
+  <div class="batch-switcher" id="batch-switcher" data-count="1">
+    <button class="batch-btn active" onclick="showBatch(${v.batchNumber})" data-batch="${v.batchNumber}">
+      <span>Batch ${v.batchNumber}</span>
+      <span class="batch-count">${candidates.length}</span>
+    </button>
   </div>
 
-  ${generateComparisonTable(candidates, v)}
+  <div id="batch-${v.batchNumber}" class="batch-panel">
+    <div class="candidates">
+      ${candidates.map((c, i) => generateCandidateCard(c, i, v)).join('')}
+    </div>
+    ${generateComparisonTable(candidates, v)}
+  </div>
 
   <div class="advisor-section">
     <div class="section-label" style="padding-bottom:20px;">
@@ -1247,6 +1264,16 @@ function buildPresentationHTML() {
     <p>Prepared by <a href="https://getsagan.com" target="_blank">Sagan</a> for ${escHTML(v.clientName)} &middot; ${escHTML(v.roleTitle)} Search &middot; ${dateFormatted}</p>
   </footer>
 
+  <script>
+    function showBatch(n) {
+      document.querySelectorAll('.batch-panel').forEach(p => p.classList.add('hidden'));
+      document.querySelectorAll('.batch-btn').forEach(b => b.classList.remove('active'));
+      var panel = document.getElementById('batch-' + n);
+      var btn = document.querySelector('[data-batch="' + n + '"]');
+      if (panel) panel.classList.remove('hidden');
+      if (btn) btn.classList.add('active');
+    }
+  </script>
 </body>
 </html>`;
 }
@@ -1940,97 +1967,96 @@ function showAIStatus(type, msg) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// MULTI-BATCH MERGE (append batch to existing page)
+// MULTI-BATCH MERGE (tab switcher pattern)
 // ═══════════════════════════════════════════════════════════════
 function mergeBatchIntoExisting(existingHTML, newCandidates, v) {
-  const advisor = ADVISORS[v.advisor];
   const dateFormatted = new Date(v.batchDate + 'T12:00:00').toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
-
-  // Parse existing HTML
   const parser = new DOMParser();
   const doc = parser.parseFromString(existingHTML, 'text/html');
+  const batchN = parseInt(v.batchNumber) || 2;
 
-  // Find the candidates container
-  const candidatesDiv = doc.querySelector('.candidates');
-  if (!candidatesDiv) {
-    // Can't merge, fall back to fresh generation
-    return buildPresentationHTML();
+  // ── Inject batch switcher CSS if not already present ──
+  if (!doc.querySelector('style[data-batch-switcher]')) {
+    const style = doc.createElement('style');
+    style.setAttribute('data-batch-switcher', '1');
+    style.textContent = `.batch-switcher{display:flex;justify-content:center;align-items:center;gap:8px;margin:8px auto 36px;max-width:800px;padding:0 24px}.batch-switcher[data-count="1"]{display:none}.batch-btn{display:flex;align-items:center;gap:8px;padding:11px 22px;border:2px solid var(--border,#e2e8f0);border-radius:10px;background:white;font-size:14px;font-weight:600;color:#6b7280;cursor:pointer;transition:all .2s}.batch-btn:hover{border-color:var(--primary)}.batch-btn.active{background:var(--dark,#131a1b);border-color:var(--dark,#131a1b);color:white}.batch-count{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:var(--primary);color:white;font-size:11px;font-weight:700}.batch-btn.active .batch-count{background:var(--highlight,#00f9b8);color:var(--dark,#131a1b)}.batch-panel.hidden{display:none}`;
+    doc.head.appendChild(style);
   }
 
-  // Count existing candidates for numbering
-  const existingCards = candidatesDiv.querySelectorAll('.card');
-  const startIdx = existingCards.length;
+  // ── Inject showBatch JS if not already present ──
+  if (!doc.querySelector('script[data-batch-js]')) {
+    const script = doc.createElement('script');
+    script.setAttribute('data-batch-js', '1');
+    script.textContent = `function showBatch(n){document.querySelectorAll('.batch-panel').forEach(p=>p.classList.add('hidden'));document.querySelectorAll('.batch-btn').forEach(b=>b.classList.remove('active'));var p=document.getElementById('batch-'+n);var b=document.querySelector('[data-batch="'+n+'"]');if(p)p.classList.remove('hidden');if(b)b.classList.add('active');}`;
+    doc.body.appendChild(script);
+  }
 
-  // Build batch divider HTML
-  const dividerHTML = `
-    <div class="batch-divider" style="display:flex;align-items:center;gap:16px;margin:32px 0 24px;">
-      <div style="flex:1;height:1px;background:#e2e8f0;"></div>
-      <div style="font-size:13px;font-weight:700;color:var(--primary);background:var(--bg-subtle);border:1px solid #e2e8f0;padding:8px 20px;border-radius:100px;white-space:nowrap;">Batch ${v.batchNumber} &middot; ${dateFormatted}</div>
-      <div style="flex:1;height:1px;background:#e2e8f0;"></div>
-    </div>`;
+  // ── Find or create the batch-switcher nav ──
+  let switcher = doc.getElementById('batch-switcher');
+  if (!switcher) {
+    // Old page without switcher — create it and wrap existing .candidates in batch-1
+    switcher = doc.createElement('div');
+    switcher.className = 'batch-switcher';
+    switcher.id = 'batch-switcher';
+    switcher.setAttribute('data-count', '1');
 
-  // Build new candidate cards
-  const newCardsHTML = newCandidates.map((c, i) => generateCandidateCard(c, startIdx + i, v)).join('');
+    // Find existing candidates div and wrap it
+    const existingCandidates = doc.querySelector('.candidates');
+    const existingComparison = doc.querySelector('.comparison-section');
+    if (existingCandidates) {
+      const panel1 = doc.createElement('div');
+      panel1.id = 'batch-1';
+      panel1.className = 'batch-panel';
+      existingCandidates.parentNode.insertBefore(panel1, existingCandidates);
+      panel1.appendChild(existingCandidates);
+      if (existingComparison) panel1.appendChild(existingComparison);
 
-  // Inject divider + new cards into candidates container
-  candidatesDiv.innerHTML += dividerHTML + newCardsHTML;
+      // Add batch 1 button to switcher
+      const existingCount = existingCandidates.querySelectorAll('.card').length;
+      switcher.innerHTML = `<button class="batch-btn active" onclick="showBatch(1)" data-batch="1"><span>Batch 1</span><span class="batch-count">${existingCount}</span></button>`;
+      panel1.parentNode.insertBefore(switcher, panel1);
+    }
+  }
 
-  // Update hero meta — batch info
-  const batchStrong = doc.querySelector('.hero-meta-item strong');
+  // ── Add new batch tab button ──
+  const newBtn = doc.createElement('button');
+  newBtn.className = 'batch-btn';
+  newBtn.setAttribute('onclick', `showBatch(${batchN})`);
+  newBtn.setAttribute('data-batch', String(batchN));
+  newBtn.innerHTML = `<span>Batch ${batchN}</span><span class="batch-count">${newCandidates.length}</span>`;
+  switcher.appendChild(newBtn);
+  switcher.setAttribute('data-count', String(switcher.querySelectorAll('.batch-btn').length));
+
+  // ── Build new batch panel ──
+  // Count ALL existing cards across all panels for numbering
+  const allExistingCards = doc.querySelectorAll('.batch-panel .card');
+  const startIdx = allExistingCards.length;
+
+  const newPanel = doc.createElement('div');
+  newPanel.id = `batch-${batchN}`;
+  newPanel.className = 'batch-panel hidden';
+  newPanel.innerHTML = `
+    <div class="candidates">
+      ${newCandidates.map((c, i) => generateCandidateCard(c, startIdx + i, v)).join('')}
+    </div>
+    ${generateComparisonTable(newCandidates, v)}
+  `;
+
+  // Insert new panel after the last existing batch panel
+  const lastPanel = doc.querySelector('.batch-panel:last-of-type') || switcher;
+  lastPanel.parentNode.insertBefore(newPanel, lastPanel.nextSibling);
+
+  // ── Update hero meta ──
   const heroMetaItems = doc.querySelectorAll('.hero-meta-item');
   heroMetaItems.forEach(item => {
     const strong = item.querySelector('strong');
-    if (strong && strong.textContent.includes('Batch')) {
-      strong.textContent = `Batches 1-${v.batchNumber}`;
-    }
-    if (strong && !isNaN(strong.textContent)) {
-      // Update candidate count
-      strong.textContent = startIdx + newCandidates.length;
+    if (strong && /Batch/.test(strong.textContent)) {
+      strong.textContent = `Batches 1-${batchN}`;
     }
   });
+  const batchNum = doc.querySelector('.batch-num');
+  if (batchNum) batchNum.textContent = `Batches 1-${batchN}`;
 
-  // Update the batch pill
-  const batchPill = doc.querySelector('.batch-pill');
-  if (batchPill) {
-    const batchNum = batchPill.querySelector('.batch-num');
-    if (batchNum) batchNum.textContent = `Batches 1-${v.batchNumber}`;
-  }
-
-  // Rebuild comparison table with ALL candidates (existing + new)
-  // Extract existing candidate data from the comparison table
-  const allCandidates = [];
-
-  // Parse existing comparison table to get old candidate data
-  const compTable = doc.querySelector('.comparison-table');
-  if (compTable) {
-    const ths = compTable.querySelectorAll('thead th');
-    const trs = compTable.querySelectorAll('tbody tr');
-    for (let col = 1; col < ths.length; col++) {
-      allCandidates.push({
-        name: ths[col].textContent,
-        location: trs[0] ? trs[0].querySelectorAll('td')[col]?.textContent || 'TBD' : 'TBD',
-        experience: trs[1] ? trs[1].querySelectorAll('td')[col]?.textContent || 'TBD' : 'TBD',
-        skills: trs[2] ? trs[2].querySelectorAll('td')[col]?.textContent || 'TBD' : 'TBD',
-        salary: trs[3] ? trs[3].querySelectorAll('td')[col]?.textContent || 'TBD' : 'TBD',
-        tap: trs[4] ? (trs[4].querySelectorAll('td')[col]?.textContent || '').includes('Yes') : false,
-        videoLink: trs[5] ? (trs[5].querySelectorAll('td')[col]?.textContent || '').includes('Available') ? 'yes' : '' : '',
-        resumeLink: trs[6] ? (trs[6].querySelectorAll('td')[col]?.textContent || '').includes('Available') ? 'yes' : '' : ''
-      });
-    }
-  }
-
-  // Add new candidates
-  newCandidates.forEach(c => allCandidates.push(c));
-
-  // Replace comparison section
-  const compSection = doc.querySelector('.comparison-section');
-  if (compSection) {
-    const newTable = generateComparisonTable(allCandidates, v);
-    const tempDiv = parser.parseFromString(newTable, 'text/html').body.firstElementChild;
-    if (tempDiv) compSection.replaceWith(tempDiv);
-  }
-
-  // Return the merged HTML
   return '<!DOCTYPE html>\n' + doc.documentElement.outerHTML;
 }
 
