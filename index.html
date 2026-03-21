@@ -8,15 +8,15 @@
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
   <style>
     :root {
-      --bg: #06282b;
-      --bg-card: #093a3e;
-      --bg-input: #0b4a4f;
-      --border: rgba(245,242,237,0.12);
-      --text: #f5f2ed;
-      --text-dim: #a8c4b8;
+      --bg: #f5f2ed;
+      --bg-card: #ffffff;
+      --bg-input: #f5f3f0;
+      --border: #e3ded8;
+      --text: #093a3e;
+      --text-dim: #6b7264;
       --accent: #2197ff;
-      --accent-hover: #47a9ff;
-      --accent-glow: rgba(33,151,255,0.15);
+      --accent-hover: #1a7fd9;
+      --accent-glow: rgba(33,151,255,0.12);
       --yellow: #f5b800;
       --green: #5ce3b0;
       --orange: #f5b800;
@@ -24,6 +24,7 @@
       --purple: #796aff;
       --white: #ffffff;
       --radius: 10px;
+      --dark-teal: #093a3e;
     }
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     html { scroll-behavior: smooth; }
@@ -31,7 +32,7 @@
 
     /* ─── TOP BAR ─── */
     .topbar {
-      background: linear-gradient(135deg, #06282b 0%, #093a3e 100%);
+      background: #ffffff;
       border-bottom: 1px solid var(--border);
       padding: 0 24px;
       height: 56px;
@@ -43,11 +44,11 @@
     .topbar-brand {
       display: flex; align-items: center; gap: 12px;
       font-family: 'Space Grotesk', 'Inter', sans-serif;
-      font-weight: 700; font-size: 15px; color: var(--white);
+      font-weight: 700; font-size: 15px; color: var(--dark-teal);
     }
     .topbar-brand img { height: 22px; }
     .topbar-badge {
-      background: var(--accent-glow); color: var(--accent);
+      background: rgba(9,58,62,0.08); color: var(--dark-teal);
       font-size: 11px; font-weight: 600; padding: 4px 10px;
       border-radius: 100px; letter-spacing: 0.05em;
     }
@@ -59,11 +60,11 @@
       cursor: pointer; transition: all 0.15s;
     }
     .btn-ghost { background: transparent; color: var(--text-dim); border: 1px solid var(--border); }
-    .btn-ghost:hover { border-color: var(--text-dim); color: var(--text); }
+    .btn-ghost:hover { border-color: #999; color: var(--text); background: var(--bg-input); }
     .btn-accent { background: var(--accent); color: white; }
     .btn-accent:hover { background: var(--accent-hover); box-shadow: 0 4px 12px var(--accent-glow); }
-    .btn-green { background: var(--green); color: #06282b; font-weight: 700; }
-    .btn-green:hover { background: #7aebbf; box-shadow: 0 4px 12px rgba(92,227,176,0.3); }
+    .btn-green { background: var(--dark-teal); color: #ffffff; font-weight: 700; }
+    .btn-green:hover { background: #0b4a4f; box-shadow: 0 4px 12px rgba(9,58,62,0.2); }
     .btn-green:disabled { opacity: 0.5; cursor: not-allowed; }
     .btn svg { width: 16px; height: 16px; }
 
@@ -71,7 +72,7 @@
     .app { display: flex; height: calc(100vh - 56px); }
     .sidebar {
       width: 420px; min-width: 420px;
-      background: var(--bg-card);
+      background: #ffffff;
       border-right: 1px solid var(--border);
       overflow-y: auto; padding: 24px;
     }
@@ -84,7 +85,7 @@
     .preview-frame {
       width: 100%; max-width: 1100px;
       background: white; border-radius: 12px;
-      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+      box-shadow: 0 10px 40px rgba(0,0,0,0.08);
       min-height: 600px;
       overflow: visible;
     }
@@ -107,7 +108,7 @@
     .form-section-title {
       font-family: 'Space Grotesk', 'Inter', sans-serif;
       font-size: 12px; font-weight: 700; text-transform: uppercase;
-      letter-spacing: 0.08em; color: var(--accent); margin-bottom: 16px;
+      letter-spacing: 0.08em; color: var(--dark-teal); margin-bottom: 16px;
     }
     .form-group { margin-bottom: 14px; }
     .form-group label {
@@ -118,8 +119,9 @@
       width: 100%; padding: 10px 12px; border-radius: 8px;
       border: 1px solid var(--border); background: var(--bg-input);
       color: var(--text); font-family: inherit; font-size: 13px;
-      transition: border-color 0.15s;
+      transition: border-color 0.15s, box-shadow 0.15s;
     }
+    .form-group select { color: var(--text); }
     .form-group input:focus, .form-group select:focus, .form-group textarea:focus {
       outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-glow);
     }
@@ -146,6 +148,7 @@
       background: var(--bg-input); border: 1px solid var(--border);
       border-radius: 8px; padding: 12px; margin-bottom: 8px;
       display: flex; align-items: center; justify-content: space-between;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.04);
     }
     .candidate-item .name { font-size: 13px; font-weight: 600; }
     .candidate-item .meta { font-size: 11px; color: var(--text-dim); }
@@ -161,9 +164,9 @@
       padding: 10px 14px; border-radius: 8px;
       font-size: 12px; margin-top: 10px; display: none;
     }
-    .sheet-status.success { display: block; background: rgba(0,184,148,0.1); color: var(--green); border: 1px solid rgba(0,184,148,0.2); }
-    .sheet-status.error { display: block; background: rgba(225,112,85,0.1); color: var(--red); border: 1px solid rgba(225,112,85,0.2); }
-    .sheet-status.loading { display: block; background: rgba(253,203,110,0.1); color: var(--orange); border: 1px solid rgba(253,203,110,0.2); }
+    .sheet-status.success { display: block; background: #ecfdf5; color: #065f46; border: 1px solid #a7f3d0; }
+    .sheet-status.error { display: block; background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; }
+    .sheet-status.loading { display: block; background: #fffbeb; color: #92400e; border: 1px solid #fde68a; }
 
     /* ─── TOAST NOTIFICATION ─── */
 
@@ -171,12 +174,12 @@
     ::-webkit-scrollbar { width: 6px; }
     ::-webkit-scrollbar-track { background: transparent; }
     ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
-    ::-webkit-scrollbar-thumb:hover { background: #444; }
+    ::-webkit-scrollbar-thumb:hover { background: #999; }
 
     /* ─── STEP TABS ─── */
     .step-tabs {
       display: flex; gap: 4px; margin-bottom: 24px;
-      background: var(--bg); border-radius: 10px; padding: 4px;
+      background: var(--bg-input); border-radius: 10px; padding: 4px;
     }
     .step-tab {
       flex: 1; padding: 8px 12px; border-radius: 8px;
@@ -185,8 +188,8 @@
       cursor: pointer; color: var(--text-dim); transition: all 0.15s;
       border: none; background: none;
     }
-    .step-tab.active { background: var(--accent); color: white; box-shadow: 0 2px 8px var(--accent-glow); }
-    .step-tab:hover:not(.active) { color: var(--text); }
+    .step-tab.active { background: var(--dark-teal); color: white; box-shadow: 0 2px 8px rgba(9,58,62,0.15); }
+    .step-tab:hover:not(.active) { color: var(--text); background: rgba(9,58,62,0.05); }
     .step-content { display: none; }
     .step-content.active { display: block; }
   </style>
