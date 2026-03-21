@@ -1689,21 +1689,26 @@ async function generateAINotes() {
 
   let successCount = 0;
 
-  // Fetch client website content for richer context and to mirror their language
+  // Fetch client website content for richer context (skip if slow, don't block notes)
   let clientSiteContext = '';
   if (v.clientUrl) {
     showAIStatus('loading', 'Scanning client website for context...');
     try {
-      const siteHTML = await fetchWithProxy(v.clientUrl);
-      if (!siteHTML) throw new Error('CORS unavailable');
-      const siteParser = new DOMParser();
-      const siteDoc = siteParser.parseFromString(siteHTML, 'text/html');
-      const metaDesc = siteDoc.querySelector('meta[name="description"]')?.getAttribute('content') || '';
-      const headings = Array.from(siteDoc.querySelectorAll('h1, h2, h3')).map(h => h.textContent.trim()).filter(Boolean).slice(0, 15).join(' | ');
-      const bodyText = siteDoc.body?.innerText?.slice(0, 2000) || '';
-      clientSiteContext = `\nCLIENT WEBSITE CONTENT (use their language and terminology when describing fit):\nMeta: ${metaDesc}\nHeadings: ${headings}\nPage text: ${bodyText}`;
-    } catch(e) { clientSiteContext = ''; }
+      const siteHTML = await Promise.race([
+        fetchWithProxy(v.clientUrl),
+        new Promise((_, rej) => setTimeout(() => rej(new Error('Site fetch timeout')), 8000))
+      ]);
+      if (siteHTML) {
+        const siteParser = new DOMParser();
+        const siteDoc = siteParser.parseFromString(siteHTML, 'text/html');
+        const metaDesc = siteDoc.querySelector('meta[name="description"]')?.getAttribute('content') || '';
+        const headings = Array.from(siteDoc.querySelectorAll('h1, h2, h3')).map(h => h.textContent.trim()).filter(Boolean).slice(0, 15).join(' | ');
+        const bodyText = siteDoc.body?.innerText?.slice(0, 2000) || '';
+        clientSiteContext = `\nCLIENT WEBSITE CONTENT (use their language and terminology when describing fit):\nMeta: ${metaDesc}\nHeadings: ${headings}\nPage text: ${bodyText}`;
+      }
+    } catch(e) { console.log('Site context skipped:', e.message); clientSiteContext = ''; }
   }
+  showAIStatus('loading', 'Writing notes...');
 
   // Build all-candidates summary for comparative positioning
   const allCandsSummary = candidates.map((c, i) => `${i+1}. ${c.name} | ${c.location || '?'} | ${c.experience || '?'} exp | ${c.salary || '?'}/mo | Skills: ${c.skills || '?'} | TAP: ${c.tap ? 'Yes' : 'No'}`).join('\n');
@@ -1803,8 +1808,8 @@ Return ONLY valid JSON. No markdown, no code fences.
             if (match) jsonStr = match[0];
           }
           jsonStr = jsonStr.trim();
-          // Fix real newlines inside JSON string values (not already-escaped \n)
-          jsonStr = jsonStr.replace(/(?<=:[ ]*"[^"]*)\n(?=[^"]*")/g, '\\n');
+          // Fix real newlines inside JSON string values
+          jsonStr = jsonStr.replace(/"([^"]*)"/g, (match) => match.replace(/\n/g, '\\n'));
           // Fix truncated JSON
           if (!jsonStr.endsWith('}')) {
             if (jsonStr.match(/"[^"]*$/)) jsonStr += '"';
