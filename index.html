@@ -1480,11 +1480,21 @@ function generateComparisonTable(cands, v) {
         </thead>
         <tbody>
           <tr><td><strong>Location</strong></td>${cands.map(c => `<td>${escHTML(c.location || 'TBD')}</td>`).join('')}</tr>
-          <tr><td><strong>Experience</strong></td>${cands.map(c => `<td>${escHTML(c.experience || (c.resumeData?.experience?.[0]?.role || '') || 'TBD')}</td>`).join('')}</tr>
+          <tr><td><strong>Experience</strong></td>${cands.map(c => {
+            let exp = c.experience || '';
+            if (!exp && c.summary) { const m = c.summary.match(/(\d+)\+?\s*(?:years?|yrs?)/i); if (m) exp = m[0]; }
+            return '<td>' + escHTML(exp || 'See profile') + '</td>';
+          }).join('')}</tr>
           <tr><td><strong>Key Skills</strong></td>${cands.map(c => {
-            const sk = c.skills || (c.resumeData?.skillCategories?.[0]?.skills || '');
-            const top3 = sk.split(',').slice(0, 3).map(s => s.trim()).filter(Boolean).join(', ');
-            return '<td>' + escHTML(top3 || 'TBD') + '</td>';
+            let sk = c.skills || '';
+            if (!sk && c.summary) {
+              // Try to extract tool/skill names from the first 2 bullets of summary
+              const bullets = c.summary.split('\n').slice(0, 2).join(' ');
+              const tools = bullets.match(/[A-Z][a-zA-Z+#.]+(?:\s+[A-Z][a-zA-Z+#.]+)?/g);
+              if (tools) sk = [...new Set(tools)].slice(0, 3).join(', ');
+            }
+            const top3 = sk.split(',').slice(0, 4).map(s => s.trim()).filter(Boolean).join(', ');
+            return '<td>' + escHTML(top3 || 'See profile') + '</td>';
           }).join('')}</tr>
           <tr><td><strong>Rate</strong></td>${cands.map(c => `<td>${escHTML(c.salary || v.salaryRange || 'TBD')}</td>`).join('')}</tr>
           <tr><td><strong>TAP</strong></td>${cands.map(c => `<td>${c.tap ? '<span style="color:var(--primary);font-weight:700;">Yes ★</span>' : 'No'}</td>`).join('')}</tr>
@@ -1793,21 +1803,25 @@ Return ONLY valid JSON. No markdown, no code fences.
             if (match) jsonStr = match[0];
           }
           jsonStr = jsonStr.trim();
-          // Fix common issues: escaped newlines inside strings
-          jsonStr = jsonStr.replace(/\n/g, '\\n');
+          // Fix real newlines inside JSON string values (not already-escaped \n)
+          jsonStr = jsonStr.replace(/(?<=:[ ]*"[^"]*)\n(?=[^"]*")/g, '\\n');
           // Fix truncated JSON
           if (!jsonStr.endsWith('}')) {
             if (jsonStr.match(/"[^"]*$/)) jsonStr += '"';
             if (!jsonStr.endsWith('}')) jsonStr += '}';
           }
-          // Try to extract "why" and "note" with regex as last resort
+          // Try JSON.parse first, then regex fallback for all 4 fields
           try {
             parsed = JSON.parse(jsonStr);
           } catch(pe) {
-            const whyMatch = text.match(/"why"\s*:\s*"([\s\S]*?)(?:"\s*,\s*"note|"\s*})/);
-            const noteMatch = text.match(/"note"\s*:\s*"([\s\S]*?)"\s*}/);
-            if (whyMatch || noteMatch) {
-              parsed = { why: whyMatch ? whyMatch[1] : '', note: noteMatch ? noteMatch[1] : '' };
+            // Regex fallback: extract all 4 fields
+            const extract = (key) => {
+              const m = text.match(new RegExp('"' + key + '"\\s*:\\s*"([\\s\\S]*?)(?:"\\s*[,}])'));
+              return m ? m[1].replace(/\\n/g, '\n').replace(/\\"/g, '"') : '';
+            };
+            const why = extract('why'), note = extract('note'), exp = extract('experience'), sk = extract('skills');
+            if (why || note) {
+              parsed = { why, note, experience: exp, skills: sk };
             } else { throw pe; }
           }
         } catch(retryErr) {
