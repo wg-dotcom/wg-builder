@@ -259,32 +259,32 @@
           <div class="form-group">
             <label>Primary / Accent Color</label>
             <div class="color-row">
-              <input type="color" id="colorPrimary" value="#0D9488" />
-              <input type="text" id="colorPrimaryHex" value="#0D9488" oninput="syncColor('colorPrimary', this.value)" />
+              <input type="color" id="colorPrimary" value="#2197ff" />
+              <input type="text" id="colorPrimaryHex" value="#2197ff" oninput="syncColor('colorPrimary', this.value)" />
             </div>
           </div>
           <div class="form-group">
             <label>Dark / Header Color</label>
             <div class="color-row">
-              <input type="color" id="colorDark" value="#131A1B" />
-              <input type="text" id="colorDarkHex" value="#131A1B" oninput="syncColor('colorDark', this.value)" />
+              <input type="color" id="colorDark" value="#093a3e" />
+              <input type="text" id="colorDarkHex" value="#093a3e" oninput="syncColor('colorDark', this.value)" />
             </div>
           </div>
           <div class="form-group">
             <label>Highlight Color</label>
             <div class="color-row">
-              <input type="color" id="colorHighlight" value="#00F9B8" />
-              <input type="text" id="colorHighlightHex" value="#00F9B8" oninput="syncColor('colorHighlight', this.value)" />
+              <input type="color" id="colorHighlight" value="#f5b800" />
+              <input type="text" id="colorHighlightHex" value="#f5b800" oninput="syncColor('colorHighlight', this.value)" />
             </div>
           </div>
           <div class="form-row">
             <div class="form-group">
               <label>Heading Font</label>
-              <input type="text" id="fontHeading" value="Inter" placeholder="e.g. Inter, Montserrat" />
+              <input type="text" id="fontHeading" value="Space Grotesk" placeholder="e.g. Inter, Montserrat" />
             </div>
             <div class="form-group">
               <label>Body Font</label>
-              <input type="text" id="fontBody" value="DM Sans" placeholder="e.g. DM Sans, Open Sans" />
+              <input type="text" id="fontBody" value="Inter" placeholder="e.g. Inter, Open Sans" />
             </div>
           </div>
         </div>
@@ -1912,8 +1912,8 @@ function getFormValues() {
         colorPrimary: document.getElementById('colorPrimaryHex').value.trim(),
     colorDark: document.getElementById('colorDarkHex').value.trim(),
     colorHighlight: document.getElementById('colorHighlightHex').value.trim(),
-    fontHeading: document.getElementById('fontHeading').value.trim() || 'Inter',
-    fontBody: document.getElementById('fontBody').value.trim() || 'DM Sans',
+    fontHeading: document.getElementById('fontHeading').value.trim() || 'Space Grotesk',
+    fontBody: document.getElementById('fontBody').value.trim() || 'Inter',
     roleTitle: document.getElementById('roleTitle').value.trim(),
     batchNumber: document.getElementById('batchNumber').value,
     batchDate: document.getElementById('batchDate').value,
