@@ -413,6 +413,12 @@
 let candidates = [];
 let generatedHTML = '';
 
+// Format numbers with commas: 4000 → "4,000", "$2500/mo" → "$2,500/mo"
+function fmtNum(str) {
+  if (!str) return str;
+  return String(str).replace(/\d{4,}/g, n => Number(n).toLocaleString('en-US'));
+}
+
 // Anthropic API key (obfuscated)
 const _ak = [115,107,45,97,110,116,45,97,112,105,48,51,45,113,72,72,80,109,57,89,72,118,100,56,79,114,100,76,99,52,65,78,75,111,54,109,70,109,70,77,88,53,98,55,78,69,56,54,76,80,67,68,120,66,83,71,115,90,67,114,54,117,72,83,88,82,104,45,114,102,111,69,57,111,54,113,99,104,76,106,95,54,118,97,78,72,109,80,70,106,98,71,108,98,102,48,118,73,119,45,95,111,102,49,54,65,65,65];
 function _ak_get() { return _ak.map(c => String.fromCharCode(c)).join(''); }
@@ -950,7 +956,7 @@ function updateCandidateList() {
     <div class="candidate-item">
       <div>
         <div class="name">${c.name} ${c.tap ? '<span style="color:var(--orange)">★ TAP</span>' : ''} ${c.recruiterNote ? '<span style="color:var(--green);font-size:11px;">✓ AI</span>' : ''}</div>
-        <div class="meta">${c.location || 'Location TBD'} · ${c.experience || 'Exp TBD'} · ${c.salary || 'Salary TBD'}</div>
+        <div class="meta">${c.location || 'Location TBD'} · ${c.experience || 'Exp TBD'} · ${fmtNum(c.salary) || 'Salary TBD'}</div>
       </div>
       <button class="remove-btn" onclick="removeCandidate(${i})">&times;</button>
     </div>
@@ -1303,7 +1309,7 @@ function generateCandidateCard(c, idx, v) {
       </div>
 
       <div class="card-footer">
-        <div class="footer-note"><strong>${escHTML(c.salary || v.salaryRange || 'TBD')}</strong> &middot; ${escHTML(v.schedule)}</div>
+        <div class="footer-note"><strong>${escHTML(fmtNum(c.salary || v.salaryRange) || 'TBD')}</strong> &middot; ${escHTML(v.schedule)}</div>
         <div class="btn-group">
           <a class="btn-card btn-outline" href="resume-${firstName.toLowerCase().replace(/[^a-z0-9]/g, '')}.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Resume</a>
           ${c.videoLink ? `<a class="btn-card btn-primary-card" href="${escHTML(c.videoLink)}" target="_blank"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>Intro Video</a>` : ''}
@@ -1546,7 +1552,7 @@ function generateComparisonTable(cands, v) {
             const top3 = sk.split(',').slice(0, 4).map(s => s.trim()).filter(Boolean).join(', ');
             return '<td>' + escHTML(top3 || 'See profile') + '</td>';
           }).join('')}</tr>
-          <tr><td><strong>Rate</strong></td>${cands.map(c => `<td>${escHTML(c.salary || v.salaryRange || 'TBD')}</td>`).join('')}</tr>
+          <tr><td><strong>Rate</strong></td>${cands.map(c => `<td>${escHTML(fmtNum(c.salary || v.salaryRange) || 'TBD')}</td>`).join('')}</tr>
           <tr><td><strong>TAP</strong></td>${cands.map(c => `<td>${c.tap ? '<span style="color:var(--primary);font-weight:700;">Yes ★</span>' : 'No'}</td>`).join('')}</tr>
         </tbody>
       </table>
