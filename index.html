@@ -1828,8 +1828,12 @@ Why bullets:
 - HubSpot + Zendesk power user. Already speaks the tools Wingz runs on.
 Note: "Andrea is the operator mindset pick. She doesn't wait for instructions. She builds the playbook. At her current company she cut response times 40% by redesigning the dispatch workflow. Built for the long haul. The kind of hire you talk about years later."
 
-Return ONLY valid JSON. No markdown fences. No explanation before or after.
-{"why":"bullet 1\\nbullet 2\\nbullet 3\\nbullet 4\\nbullet 5","note":"2-4 sentences. Position vs batch. Sommelier flair. Honest.","experience":"X yrs [specific role] (max 20 chars)","skills":"Tool1, Tool2, Tool3, Tool4, Tool5, Tool6, Tool7, Tool8 (list 6-8 key tools/skills)","jobs":[{"role":"Job Title","company":"Company Name","dates":"Mon YYYY - Present"},{"role":"Previous Role","company":"Company","dates":"Mon YYYY - Mon YYYY"}]}`;
+DIFFERENTIATION RULE: Each candidate MUST have a unique angle in their note. Use a DIFFERENT sommelier phrase for each. Candidate #1 might be "the safe bet", #2 "the force multiplier", #3 "the Swiss Army knife", #4 "the calculated risk worth taking". NEVER repeat the same framing across candidates. Each note should answer a DIFFERENT question: one about reliability, one about upside, one about culture fit, one about technical depth, one about value.
+
+Return ONLY valid JSON. No markdown fences. No explanation before or after. Fill in REAL content for this candidate, do NOT use placeholder text.
+{"why":"Heavily certified Microsoft specialist: AZ-900, MS-900, AZ-104 in progress\\nLives in the exact DIS environment: remote ticket management, M365 admin daily\\nHandles 50+ tickets/week at current MSP. The bread-and-butter issues eating your time\\n4 years IT support across 2 MSPs. Knows the pace and the tools\\nStrong communicator. Clients at current role rate him 4.8/5 satisfaction","note":"Menard is the sleep easy at night hire in this batch. MSP background means he knows the pace, the tools, the client expectations. Minimal ramp-up. Solid all-rounder who can carry the load from day one.","experience":"4 yrs IT Support","skills":"Azure, M365, ServiceNow, Active Directory, PowerShell, ITIL","jobs":[{"role":"Service Desk Engineer","company":"Datacom MSP","dates":"Mar 2023 - Present"},{"role":"IT Support Specialist","company":"TechCorp SA","dates":"Jan 2021 - Feb 2023"}]}
+
+IMPORTANT: The example above is just a FORMAT reference. Write COMPLETELY NEW content specific to THIS candidate (${c.name}). Use their actual skills, experience, and background. Do NOT copy the example text.`;
 
       let parsed = null;
       for (let attempt = 0; attempt < 3 && !parsed; attempt++) {
