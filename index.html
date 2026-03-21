@@ -2115,6 +2115,25 @@ function lighten(hex, amount) {
     return v.toString(16).padStart(2, '0');
   }).join('');
 }
+
+// ── Self-test on load ──
+(function selfTest() {
+  const required = [
+    'buildPresentationHTML', 'generateCandidateCard', 'generateComparisonTable',
+    'pullFromSheet', 'autoDeploy', 'extractBranding', 'generateAINotes',
+    'mergeBatchIntoExisting', 'callAI', 'fetchWithProxy'
+  ];
+  const missing = required.filter(fn => typeof window[fn] !== 'function');
+  if (missing.length) {
+    document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100vh;font-family:sans-serif;flex-direction:column;gap:16px;background:#f5f2ed;">'
+      + '<div style="background:white;border:2px solid #ff7455;border-radius:12px;padding:32px 40px;max-width:480px;text-align:center;">'
+      + '<div style="font-size:24px;margin-bottom:12px;">⚠️</div>'
+      + '<strong style="font-size:16px;color:#093a3e;">Builder failed to load</strong>'
+      + '<p style="margin-top:8px;color:#6b7280;font-size:14px;">Missing functions: ' + missing.join(', ') + '</p>'
+      + '<p style="margin-top:12px;color:#6b7280;font-size:13px;">Hard refresh (Cmd+Shift+R) or report to Jesus.</p>'
+      + '</div></div>';
+  }
+})();
 </script>
 
 </body>
