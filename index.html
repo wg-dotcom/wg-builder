@@ -425,32 +425,44 @@ function _gk_get() { return _gk.map(c => String.fromCharCode(c)).join(''); }
 const _qk = [103,115,107,95,110,85,117,114,105,50,89,69,102,49,97,120,74,79,112,90,89,105,114,72,87,71,100,121,98,51,70,89,85,101,122,98,56,97,87,82,70,104,103,51,55,79,55,113,86,89,87,115,108,57,86,121];
 function _qk_get() { return _qk.map(c => String.fromCharCode(c)).join(''); }
 
-// Unified AI call: RACES all providers simultaneously, first valid response wins
+// Unified AI call: tries Groq (8b for speed + rate limits), falls back to Anthropic, then Gemini
 async function callAI(prompt, maxTokens = 200) {
-  const groq = fetch('https://api.groq.com/openai/v1/chat/completions', {
-    method: 'POST', signal: AbortSignal.timeout(10000),
-    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + _qk_get() },
-    body: JSON.stringify({ model: 'llama-3.3-70b-versatile', max_tokens: maxTokens, temperature: 0.3, messages: [{ role: 'user', content: prompt }] })
-  }).then(async r => { const d = await r.json(); if (r.ok && d.choices?.[0]?.message?.content) return d.choices[0].message.content.trim(); throw new Error('Groq:' + r.status); });
-
-  const anthropic = fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST', signal: AbortSignal.timeout(10000),
-    headers: { 'Content-Type': 'application/json', 'x-api-key': _ak_get(), 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
-    body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: maxTokens, messages: [{ role: 'user', content: prompt }] })
-  }).then(async r => { const d = await r.json(); if (r.ok && d.content?.[0]) return d.content[0].text.trim(); throw new Error('Anthropic:' + r.status); });
-
-  const gemini = fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' + _gk_get(), {
-    method: 'POST', signal: AbortSignal.timeout(10000),
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { maxOutputTokens: maxTokens, temperature: 0.3 } })
-  }).then(async r => { const d = await r.json(); if (r.ok && d.candidates?.[0]?.content?.parts?.[0]?.text) return d.candidates[0].content.parts[0].text.trim(); throw new Error('Gemini:' + r.status); });
-
+  // Primary: Groq llama-3.1-8b-instant (generous rate limits on free tier)
   try {
-    return await Promise.any([groq, anthropic, gemini]);
-  } catch(e) {
-    console.log('All AI failed:', e.errors?.map(x => x.message));
-    throw new Error('All AI providers failed');
-  }
+    const resp = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST', signal: AbortSignal.timeout(15000),
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + _qk_get() },
+      body: JSON.stringify({ model: 'llama-3.1-8b-instant', max_tokens: maxTokens, temperature: 0.3, messages: [{ role: 'user', content: prompt }] })
+    });
+    const d = await resp.json();
+    if (resp.ok && d.choices?.[0]?.message?.content) return d.choices[0].message.content.trim();
+    console.log('Groq 8b failed:', d.error?.message || resp.status);
+  } catch(e) { console.log('Groq 8b error:', e.message); }
+
+  // Fallback 1: Anthropic (if credits available)
+  try {
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST', signal: AbortSignal.timeout(15000),
+      headers: { 'Content-Type': 'application/json', 'x-api-key': _ak_get(), 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
+      body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: maxTokens, messages: [{ role: 'user', content: prompt }] })
+    });
+    const d = await resp.json();
+    if (resp.ok && d.content?.[0]) return d.content[0].text.trim();
+    console.log('Anthropic failed:', d.error?.message || resp.status);
+  } catch(e) { console.log('Anthropic error:', e.message); }
+
+  // Fallback 2: Gemini
+  try {
+    const resp = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' + _gk_get(), {
+      method: 'POST', signal: AbortSignal.timeout(15000),
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { maxOutputTokens: maxTokens, temperature: 0.3 } })
+    });
+    const d = await resp.json();
+    if (resp.ok && d.candidates?.[0]?.content?.parts?.[0]?.text) return d.candidates[0].content.parts[0].text.trim();
+  } catch(e) {}
+
+  throw new Error('All AI providers failed. Check API credits.');
 }
 
 const ADVISORS = {
@@ -1753,9 +1765,9 @@ async function generateAINotes() {
 
   for (let i = 0; i < candidates.length; i++) {
     const c = candidates[i];
-    // Delay between candidates (Groq free tier: 6K tokens/min, rich prompt ~800 tokens + 300 output)
+    // Delay between candidates (8b-instant has higher rate limits, 8s is safe)
     if (i > 0) {
-      const delay = 20;
+      const delay = 8;
       for (let s = delay; s > 0; s--) {
         showAIStatus('loading', `Writing notes for ${c.name} in ${s}s (${i + 1}/${candidates.length})...`);
         await new Promise(r => setTimeout(r, 1000));
