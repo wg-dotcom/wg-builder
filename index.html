@@ -1021,12 +1021,13 @@ function buildPresentationHTML() {
       --primary-deeper: ${darken(v.colorPrimary, 30)};
       --dark: ${v.colorDark};
       --highlight: ${v.colorHighlight};
-      --bg-light: ${lighten(v.colorPrimary, 92)};
-      --bg-subtle: ${lighten(v.colorPrimary, 95)};
+      --bg-light: ${lighten(v.colorDark, 8)};
+      --bg-subtle: ${darken(v.colorDark, 5)};
+      --bg-page: ${darken(v.colorDark, 10)};
       --white: #FFFFFF;
-      --text-dark: #1a1a2e;
-      --text-mid: #374151;
-      --text-light: #6B7280;
+      --text-dark: #ffffff;
+      --text-mid: rgba(255,255,255,0.6);
+      --text-light: rgba(255,255,255,0.4);
       --border: #e0e0e0;
       --tag-bg: ${lighten(v.colorPrimary, 90)};
       --tag-color: ${darken(v.colorPrimary, 10)};
@@ -1038,7 +1039,7 @@ function buildPresentationHTML() {
     }
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     html { scroll-behavior: smooth; }
-    body { font-family: '${escHTML(v.fontBody)}', '${escHTML(v.fontHeading)}', sans-serif; font-size: 16px; color: var(--text-dark); background: var(--bg-subtle); line-height: 1.6; }
+    body { font-family: '${escHTML(v.fontBody)}', '${escHTML(v.fontHeading)}', sans-serif; font-size: 16px; color: var(--text-dark); background: var(--bg-page); line-height: 1.6; }
 
     .site-header { background: #FFFFFF; padding: 0 32px; position: sticky; top: 0; z-index: 100; box-shadow: 0 1px 8px rgba(0,0,0,0.08); border-bottom: 1px solid #eee; }
     .header-inner { max-width: 1080px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; height: 68px; }
@@ -1077,36 +1078,65 @@ function buildPresentationHTML() {
     .batch-panel.hidden { display: none; }
 
     .section-label { text-align: center; padding: 24px 24px 28px; }
-    .section-label h2 { font-family: var(--font-heading); font-size: 26px; font-weight: 800; color: var(--text-dark); margin-bottom: 6px; }
-    .section-label p { font-size: 15px; color: var(--text-light); }
+    .section-label h2 { font-family: var(--font-heading); font-size: 26px; font-weight: 800; color: #fff; margin-bottom: 6px; }
+    .section-label p { font-size: 15px; color: rgba(255,255,255,0.45); }
 
     .candidates { max-width: 900px; margin: 0 auto; padding: 0 24px 40px; display: flex; flex-direction: column; gap: 24px; }
 
-    .card { background: white; border-radius: var(--radius); box-shadow: var(--shadow-sm); overflow: hidden; border: 1px solid var(--border); transition: box-shadow 0.2s; }
-    .card:hover { box-shadow: var(--shadow-md); }
-    .card-header { display: flex; align-items: flex-start; gap: 16px; padding: 24px 28px 16px; }
-    .rank-badge { width: 36px; height: 36px; background: var(--primary); color: white; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-family: var(--font-heading); font-weight: 800; font-size: 15px; flex-shrink: 0; }
-    .card-name { font-family: var(--font-heading); font-size: 22px; font-weight: 800; color: var(--text-dark); }
-    .card-meta-row { display: flex; gap: 16px; margin-top: 6px; flex-wrap: wrap; }
-    .card-meta-item { display: flex; align-items: center; gap: 5px; font-size: 13px; color: var(--text-light); }
-    .card-meta-item svg { width: 14px; height: 14px; }
-    .card-meta-item strong { color: var(--text-dark); }
+    .candidate-card { max-width: 1100px; margin: 0 auto 40px; padding: 0 40px; }
+    .card { background: var(--dark); border-radius: 16px; overflow: hidden; border: 1px solid rgba(255,255,255,0.06); box-shadow: 0 4px 24px rgba(0,0,0,0.3); transition: transform 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease; }
+    .card:hover { transform: translateY(-2px); box-shadow: 0 8px 40px rgba(0,0,0,0.4); border-color: ${v.colorPrimary}33; }
+    .card.featured { border-color: ${v.colorPrimary}55; box-shadow: 0 4px 32px ${v.colorPrimary}1a; }
+    .card-top { background: ${lighten(v.colorDark, 8)}; padding: 36px 44px; display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 1px solid rgba(255,255,255,0.06); }
+    .card-identity { display: flex; align-items: center; gap: 20px; }
+    .card-avatar { width: 60px; height: 60px; border-radius: 50%; background: ${v.colorPrimary}26; border: 2px solid ${v.colorPrimary}4d; display: flex; align-items: center; justify-content: center; font-size: 20px; font-weight: 700; color: var(--primary); flex-shrink: 0; font-family: var(--font-heading); }
+    .card-avatar.featured-avatar { background: var(--primary); border-color: var(--primary); color: var(--dark); }
+    .card-name { font-family: var(--font-heading); font-size: 24px; font-weight: 700; color: #fff; margin-bottom: 4px; }
+    .card-location { font-size: 14px; color: rgba(255,255,255,0.5); display: flex; align-items: center; gap: 6px; }
+    .card-badges { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+    .badge { font-size: 10px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; padding: 4px 10px; border-radius: 100px; }
+    .badge-shortlisted { background: ${v.colorPrimary}33; color: var(--primary); border: 1px solid ${v.colorPrimary}66; }
+    .card-rate { text-align: right; }
+    .card-rate-amount { font-size: 24px; font-weight: 700; color: var(--primary); font-family: var(--font-heading); }
+    .card-rate-period { font-size: 11px; color: rgba(255,255,255,0.4); text-transform: uppercase; letter-spacing: 1px; }
     .tap-badge { display: inline-flex; align-items: center; gap: 5px; background: linear-gradient(135deg, #f59e0b, #d97706); color: white; padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: 700; letter-spacing: 0.04em; }
 
-    .tags-row { padding: 0 28px 16px; display: flex; flex-wrap: wrap; gap: 6px; }
+    .tags-row { padding: 0 44px 16px; display: flex; flex-wrap: wrap; gap: 6px; }
     .tag { display: inline-block; padding: 5px 14px; border-radius: 100px; font-size: 12px; font-weight: 600; }
     .tag-filled { background: var(--tag-bg); color: var(--tag-color); }
     .tag-filled:nth-child(3) { background: var(--highlight); color: var(--dark); }
     .tag-outlined { background: transparent; color: var(--text-mid); border: 1.5px solid #ddd; }
 
-    .card-body { padding: 0 28px 20px; }
-    .card-body-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; border-top: 1px solid #f0f0f0; padding-top: 20px; margin: 0 28px 20px; padding-left: 0; padding-right: 0; }
+    .card-body { padding: 40px 44px; color: rgba(255,255,255,0.6); }
     .card-section { margin-bottom: 0; }
-    .card-section-title { font-family: var(--font-heading); font-size: 13px; font-weight: 700; color: var(--primary); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 14px; }
+    .card-section-title { font-size: 10px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: var(--primary); margin-bottom: 16px; margin-top: 32px; font-family: var(--font-heading); }
+    .card-section-title:first-of-type { margin-top: 0; }
+    .card-narrative { font-size: 16px; line-height: 1.85; color: rgba(255,255,255,0.55); margin-bottom: 32px; font-style: italic; border-left: 3px solid var(--primary); padding-left: 20px; }
+    .card-narrative strong { color: #fff; font-weight: 600; font-style: normal; }
     .experience-list { display: flex; flex-direction: column; gap: 14px; }
-    .exp-entry .exp-role { font-weight: 700; font-size: 14px; color: var(--text-dark); }
-    .exp-entry .exp-company { font-size: 13px; color: var(--primary); font-weight: 500; }
-    .exp-entry .exp-dates { font-size: 12px; color: var(--text-light); margin-top: 2px; }
+    .experience-list { display: flex; flex-direction: column; gap: 20px; }
+    .exp-item { display: flex; gap: 16px; align-items: flex-start; }
+    .exp-dot-col { display: flex; flex-direction: column; align-items: center; padding-top: 6px; }
+    .exp-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--primary); flex-shrink: 0; }
+    .exp-line { width: 1px; flex: 1; background: ${v.colorPrimary}33; margin-top: 6px; min-height: 30px; }
+    .exp-content { flex: 1; padding-bottom: 4px; }
+    .exp-role { font-size: 15px; font-weight: 600; color: #fff; }
+    .exp-company { font-size: 13px; color: rgba(255,255,255,0.45); margin-top: 2px; }
+    .exp-highlight { font-size: 13px; color: var(--primary); margin-top: 4px; }
+    .tags-cluster { display: flex; flex-wrap: wrap; gap: 8px; }
+    .ctag { font-size: 12px; padding: 6px 14px; border-radius: 6px; background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.5); }
+    .ctag-key { background: ${v.colorPrimary}1a; color: var(--primary); font-weight: 600; }
+    .fit-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+    .fit-item { background: rgba(255,255,255,0.04); padding: 14px 16px; border-radius: 8px; }
+    .fit-label { font-size: 12px; color: rgba(255,255,255,0.7); line-height: 1.5; }
+    .strength-bars { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 24px; }
+    .bar-item { display: flex; flex-direction: column; gap: 6px; }
+    .bar-label { font-size: 13px; color: rgba(255,255,255,0.6); }
+    .bar-track { height: 5px; background: rgba(255,255,255,0.08); border-radius: 3px; overflow: hidden; }
+    .bar-fill { height: 100%; background: linear-gradient(90deg, var(--primary), var(--highlight)); border-radius: 3px; transition: width 1.5s ease; }
+    .card-actions { margin-top: 28px; padding-top: 24px; border-top: 1px solid rgba(255,255,255,0.06); display: flex; align-items: center; gap: 14px; }
+    .video-intro-btn { display: inline-flex; align-items: center; gap: 8px; padding: 10px 22px; background: transparent; border: 1.5px solid var(--primary); border-radius: 6px; color: var(--primary); font-size: 13px; font-weight: 600; letter-spacing: 0.3px; text-decoration: none; transition: background 0.2s ease, color 0.2s ease, transform 0.15s ease; }
+    .video-intro-btn:hover { background: var(--primary); color: #fff; transform: translateY(-1px); }
 
     .experience-item { display: flex; justify-content: space-between; align-items: baseline; padding: 6px 0; border-bottom: 1px solid #f8f8f8; }
     .exp-role { font-size: 14px; font-weight: 600; color: var(--text-dark); }
@@ -1114,9 +1144,9 @@ function buildPresentationHTML() {
     .exp-dates { font-size: 12px; color: var(--text-light); white-space: nowrap; }
 
     .strength-list { padding-left: 18px; }
-    .strength-list li { font-size: 14px; color: var(--text-mid); margin-bottom: 8px; line-height: 1.6; }
+    .strength-list li { font-size: 14px; color: rgba(255,255,255,0.6); margin-bottom: 8px; line-height: 1.6; }
 
-    .card-footer { display: flex; align-items: center; justify-content: space-between; padding: 16px 28px; background: #fafafa; border-top: 1px solid #f0f0f0; }
+    .card-footer { display: flex; align-items: center; justify-content: space-between; padding: 16px 44px; background: rgba(255,255,255,0.03); border-top: 1px solid rgba(255,255,255,0.06); }
     .footer-note { font-size: 13px; color: var(--text-light); }
     .footer-note strong { color: var(--text-dark); }
     .btn-group { display: flex; gap: 8px; }
@@ -1128,29 +1158,30 @@ function buildPresentationHTML() {
     .btn-card svg { width: 15px; height: 15px; }
     .btn-tap { background: linear-gradient(135deg, #f59e0b, #d97706); color: white; border: none; }
 
-    .card-recruiter-note { margin: 0 28px 20px; padding: 16px 20px; background: ${lighten(v.colorPrimary, 95)}; border-radius: 10px; border-left: 3px solid var(--primary); }
+    .card-recruiter-note { margin: 0; padding: 16px 20px; }
     .card-recruiter-note .recruiter-note-title { font-family: var(--font-heading); font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--primary); margin-bottom: 8px; }
-    .card-recruiter-note p { font-size: 14px; color: var(--text-mid); line-height: 1.7; }
+    .card-recruiter-note p { font-size: 14px; color: rgba(255,255,255,0.5); line-height: 1.7; }
 
-    .comparison-section { max-width: 1000px; margin: 20px auto 40px; padding: 0 24px; }
+    .comparison-section { max-width: 1100px; margin: 20px auto 40px; padding: 0 40px; }
     .comparison-table-wrap { overflow-x: auto; border-radius: var(--radius); box-shadow: var(--shadow-sm); }
-    .comparison-table { width: 100%; border-collapse: collapse; background: white; font-size: 13px; }
-    .comparison-table thead th { background: var(--dark); color: white; padding: 14px 16px; text-align: left; font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; }
+    .comparison-table { width: 100%; border-collapse: collapse; background: var(--dark); font-size: 13px; color: rgba(255,255,255,0.6); border-radius: 12px; overflow: hidden; }
+    .comparison-table thead th { background: ${lighten(v.colorDark, 8)}; color: var(--primary); padding: 14px 16px; text-align: left; font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; }
     .comparison-table thead th:first-child { border-radius: 14px 0 0 0; }
     .comparison-table thead th:last-child { border-radius: 0 14px 0 0; }
     .comparison-table tbody td { padding: 12px 16px; border-bottom: 1px solid #f0f0f0; }
     .comparison-table tbody tr:last-child td { border-bottom: none; }
-    .comparison-table tbody tr:hover { background: var(--bg-light); }
-    .comparison-table .highlight-cell { background: ${lighten(v.colorPrimary, 92)}; font-weight: 600; color: var(--primary-dark); }
+    .comparison-table tbody tr:hover { background: rgba(255,255,255,0.03); }
+    .comparison-table tbody td { border-bottom: 1px solid rgba(255,255,255,0.06); padding: 12px 16px; }
+    .comparison-table .highlight-cell { background: ${v.colorPrimary}1a; font-weight: 600; color: var(--primary); }
 
-    .advisor-section { max-width: 900px; margin: 0 auto 40px; padding: 0 24px; }
-    .advisor-card { display: flex; gap: 24px; background: white; border-radius: var(--radius); padding: 28px; box-shadow: var(--shadow-sm); border: 1px solid var(--border); }
+    .advisor-section { max-width: 1100px; margin: 0 auto 40px; padding: 0 40px; }
+    .advisor-card { display: flex; gap: 24px; background: var(--dark); border-radius: 16px; padding: 28px; box-shadow: 0 4px 24px rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.06); }
     .advisor-avatar { width: 80px; height: 80px; border-radius: 50%; object-fit: cover; border: 3px solid var(--primary); flex-shrink: 0; }
     .advisor-info { flex: 1; }
     .advisor-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--primary); margin-bottom: 4px; }
-    .advisor-name { font-family: var(--font-heading); font-size: 20px; font-weight: 800; color: var(--text-dark); }
-    .advisor-role { font-size: 13px; color: var(--text-light); margin-bottom: 10px; }
-    .advisor-summary { font-size: 14px; color: var(--text-mid); line-height: 1.7; }
+    .advisor-name { font-family: var(--font-heading); font-size: 20px; font-weight: 800; color: #fff; }
+    .advisor-role { font-size: 13px; color: rgba(255,255,255,0.4); margin-bottom: 10px; }
+    .advisor-summary { font-size: 14px; color: rgba(255,255,255,0.55); line-height: 1.7; }
 
     .site-footer { text-align: center; padding: 32px; color: var(--text-light); font-size: 13px; border-top: 1px solid var(--border); background: white; }
     .footer-logos { display: flex; align-items: center; justify-content: center; gap: 16px; margin-bottom: 12px; }
@@ -1160,8 +1191,11 @@ function buildPresentationHTML() {
 
     @media (max-width: 768px) {
       .hero { padding: 48px 20px 40px; }
-      .card-header { flex-direction: column; }
-      .card-body-grid { grid-template-columns: 1fr; }
+      .card-top { flex-direction: column; padding: 24px; gap: 16px; }
+      .card-body { padding: 24px; }
+      .candidate-card { padding: 0 16px; }
+      .fit-grid { grid-template-columns: 1fr; }
+      .strength-bars { grid-template-columns: 1fr; }
       .advisor-card { flex-direction: column; text-align: center; }
       .comparison-table { font-size: 11px; }
     }
@@ -1276,85 +1310,108 @@ function buildPresentationHTML() {
 
 function generateCandidateCard(c, idx, v) {
   const skills = c.skills ? c.skills.split(',').map(s => s.trim()).filter(Boolean) : [];
-  const tapBadge = c.tap ? '<span class="tap-badge">★ TAP Certified</span>' : '';
   const firstName = c.name.split(' ')[0];
+  const initials = c.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
 
-  // Split skills: first 5 filled, rest outlined
-  const filledSkills = skills.slice(0, 5);
-  const outlinedSkills = skills.slice(5);
+  // Split skills: first 5 key, rest secondary
+  const keySkills = skills.slice(0, 5);
+  const otherSkills = skills.slice(5);
 
-  // Parse experience entries from resumeData
+  // Experience entries from resumeData
   const expEntries = c.resumeData?.experience?.length ? c.resumeData.experience.slice(0, 4) : [];
 
-  // Education from resumeData
-  const education = c.resumeData?.education?.[0];
-  const eduText = education ? `${education.degree}${education.school ? ' · ' + education.school : ''}` : '';
+  // Strength bullets from summary
+  const strengthBullets = (() => {
+    if (!c.summary) return [];
+    let bullets = c.summary.split('\\n').filter(s => s.trim());
+    if (bullets.length <= 1) bullets = c.summary.split(/(?<=\\.)\\s+/).filter(s => s.trim() && s.length > 10);
+    return bullets.slice(0, 5).map(s => s.replace(/^[-•*]\\s*/, '').trim());
+  })();
 
-  return `
-    <article class="card" id="candidate-${idx}">
-      <div class="card-header">
-        <div class="rank-badge"><span>${idx + 1}</span></div>
-        <div class="card-name-block">
-          <div class="card-name">${escHTML(c.name)} ${tapBadge}</div>
-          <div class="card-meta-row">
-            ${c.location ? `<div class="card-meta-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>${escHTML(c.location)}</div>` : ''}
-            ${c.experience ? `<div class="card-meta-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg><strong>${escHTML(c.experience)}</strong> experience</div>` : ''}
-            ${eduText ? `<div class="card-meta-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c0 2 3 3 6 3s6-1 6-3v-5"/></svg>${escHTML(eduText)}</div>` : ''}
+  // Strength bars (top 6 skills with pseudo-scores based on position)
+  const barSkills = skills.slice(0, 6);
+  const barScores = [95, 90, 88, 85, 82, 78];
+
+  return \`
+    <div class="candidate-card">
+      <div class="card\${idx === 0 ? ' featured' : ''}" id="candidate-\${idx}">
+        <div class="card-top">
+          <div class="card-identity">
+            <div class="card-avatar\${idx === 0 ? ' featured-avatar' : ''}">\${initials}</div>
+            <div>
+              <div class="card-name">\${escHTML(c.name)}</div>
+              <div class="card-location">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                \${escHTML(c.location || 'Remote')} &middot; \${escHTML(c.experience || '')}
+              </div>
+              <div class="card-badges">
+                \${c.tap ? '<span class="badge badge-shortlisted">★ TAP Certified</span>' : ''}
+                \${idx === 0 ? '<span class="badge badge-shortlisted">Pre-Shortlisted</span>' : ''}
+              </div>
+            </div>
+          </div>
+          <div class="card-rate">
+            <div class="card-rate-amount">\${escHTML(fmtNum(c.salary || v.salaryRange) || 'TBD')}</div>
+            <div class="card-rate-period">USD / Month</div>
           </div>
         </div>
-      </div>
 
-      ${skills.length ? `<div class="tags-row">
-        ${filledSkills.map(s => `<span class="tag tag-filled">${escHTML(s)}</span>`).join('')}
-        ${outlinedSkills.map(s => `<span class="tag tag-outlined">${escHTML(s)}</span>`).join('')}
-      </div>` : ''}
+        <div class="card-body">
+          \${c.recruiterNote ? \`
+          <div class="card-narrative">
+            \${escHTML(c.recruiterNote)}
+          </div>\` : ''}
 
-      <div class="card-body card-body-grid">
-        ${expEntries.length ? `
-        <div class="card-section">
-          <div class="card-section-title">Key Experience</div>
+          \${expEntries.length ? \`
+          <div class="card-section-title">Experience Highlights</div>
           <div class="experience-list">
-            ${expEntries.map(exp => `
-            <div class="exp-entry">
-              <div class="exp-role">${escHTML(exp.role)}</div>
-              <div class="exp-company">${escHTML(exp.company)}</div>
-              <div class="exp-dates">${escHTML(exp.dates || '')}</div>
-            </div>`).join('')}
+            \${expEntries.map((exp, i) => \`
+            <div class="exp-item">
+              <div class="exp-dot-col">
+                <div class="exp-dot"></div>
+                \${i < expEntries.length - 1 ? '<div class="exp-line"></div>' : ''}
+              </div>
+              <div class="exp-content">
+                <div class="exp-role">\${escHTML(exp.role)}</div>
+                <div class="exp-company">\${escHTML(exp.company)}\${exp.dates ? ' &middot; ' + escHTML(exp.dates) : ''}</div>
+                \${exp.description ? '<div class="exp-highlight">' + escHTML(exp.description.split('\\n')[0]) + '</div>' : ''}
+              </div>
+            </div>\`).join('')}
+          </div>\` : ''}
+
+          \${skills.length ? \`
+          <div class="card-section-title">Platforms &amp; Tools</div>
+          <div class="tags-cluster">
+            \${keySkills.map(s => '<span class="ctag ctag-key">' + escHTML(s) + '</span>').join('')}
+            \${otherSkills.map(s => '<span class="ctag">' + escHTML(s) + '</span>').join('')}
+          </div>\` : ''}
+
+          \${strengthBullets.length ? \`
+          <div class="card-section-title">\${escHTML(v.clientName)} Fit Indicators</div>
+          <div class="fit-grid">
+            \${strengthBullets.slice(0, 3).map(s => \`
+            <div class="fit-item">
+              <div class="fit-label">\${escHTML(s.length > 50 ? s.slice(0, 50) + '...' : s)}</div>
+            </div>\`).join('')}
+          </div>\` : ''}
+
+          \${barSkills.length ? \`
+          <div class="card-section-title">Strength Profile</div>
+          <div class="strength-bars">
+            \${barSkills.map((s, i) => \`
+            <div class="bar-item">
+              <div class="bar-label">\${escHTML(s)}</div>
+              <div class="bar-track"><div class="bar-fill" style="width:\${barScores[i] || 75}%"></div></div>
+            </div>\`).join('')}
+          </div>\` : ''}
+
+          <div class="card-actions">
+            \${c.videoLink ? \`<a class="video-intro-btn" href="\${escHTML(c.videoLink)}" target="_blank"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>Watch Intro Video</a>\` : ''}
+            \${c.tap ? \`<a class="video-intro-btn" href="https://drive.google.com/file/d/1lvb0EWiOoIzbKKFGXN0IiuDjdGYOZdHC/view" target="_blank"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>TAP Info</a>\` : ''}
           </div>
-        </div>` : ''}
-
-        ${c.summary ? `
-        <div class="card-section">
-          <div class="card-section-title">Why ${escHTML(firstName)}</div>
-          <ul class="strength-list">
-            ${(() => {
-              let bullets = c.summary.split('\n').filter(s => s.trim());
-              if (bullets.length <= 1) bullets = c.summary.split(/(?<=\.)\s+/).filter(s => s.trim() && s.length > 10);
-              return bullets.slice(0, 5).map(s => `<li>${escHTML(s.replace(/^[-•*]\s*/, '').trim())}</li>`).join('');
-            })()}
-          </ul>
-        </div>` : ''}
-      </div>
-
-      <div class="card-footer">
-        <div class="footer-note"><strong>${escHTML(fmtNum(c.salary || v.salaryRange) || 'TBD')}</strong> &middot; ${escHTML(v.schedule)}</div>
-        <div class="btn-group">
-          <a class="btn-card btn-outline" href="resume-${firstName.toLowerCase().replace(/[^a-z0-9]/g, '') || String(idx + 1)}.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Resume</a>
-          ${c.videoLink ? `<a class="btn-card btn-primary-card" href="${escHTML(c.videoLink)}" target="_blank"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>Intro Video</a>` : ''}
-          ${c.tap ? `<a class="btn-card btn-tap" href="https://drive.google.com/file/d/1lvb0EWiOoIzbKKFGXN0IiuDjdGYOZdHC/view" target="_blank"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>TAP Info</a>` : ''}
         </div>
       </div>
-
-      ${c.recruiterNote ? `
-      <div class="card-recruiter-note">
-        <div class="recruiter-note-title">Recruiter's Note</div>
-        <p>${escHTML(c.recruiterNote)}</p>
-      </div>` : `
-      <div class="card-recruiter-note">
-        <div class="recruiter-note-title">Recruiter's Note</div>
-        <p>${escHTML(firstName)} brings a strong profile aligned with the ${escHTML(v.roleTitle)} position at ${escHTML(v.clientName)}. ${c.experience ? 'With ' + escHTML(c.experience) + ' of experience, they' : 'They'} offer the skills and background needed to make an immediate impact.</p>
-      </div>`}
-    </article>`;
+    </div>\`;
 }
 
 function buildResumeHTML(c, v) {
