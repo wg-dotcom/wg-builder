@@ -1021,8 +1021,8 @@ function buildPresentationHTML() {
       --primary-deeper: ${darken(v.colorPrimary, 30)};
       --dark: ${v.colorDark};
       --highlight: ${v.colorHighlight};
-      --bg-light: ${isDarkColor(v.colorDark) ? lighten(v.colorDark, 8) : lighten(v.colorDark, 95)};
-      --bg-subtle: ${isDarkColor(v.colorDark) ? darken(v.colorDark, 5) : lighten(v.colorDark, 90)};
+      --bg-light: ${isDarkColor(v.colorDark) ? lighten(v.colorDark, 12) : lighten(v.colorDark, 95)};
+      --bg-subtle: ${isDarkColor(v.colorDark) ? lighten(v.colorDark, 15) : 'rgba(0,0,0,0.04)'};
       --bg-page: ${isDarkColor(v.colorDark) ? darken(v.colorDark, 10) : '#f5f5f5'};
       --bg-card: ${isDarkColor(v.colorDark) ? lighten(v.colorDark, 6) : '#ffffff'};
       --bg-card-hover: ${isDarkColor(v.colorDark) ? lighten(v.colorDark, 12) : '#fafafa'};
@@ -1113,7 +1113,7 @@ function buildPresentationHTML() {
     .tag { display: inline-block; padding: 5px 14px; border-radius: 100px; font-size: 12px; font-weight: 600; }
     .tag-filled { background: var(--tag-bg); color: var(--tag-color); }
     .tag-filled:nth-child(3) { background: var(--highlight); color: var(--dark); }
-    .tag-outlined { background: transparent; color: var(--text-mid); border: 1.5px solid var(--border-strong); }
+    .tag-outlined { background: var(--bg-subtle); color: var(--text-mid); border: 1.5px solid var(--border-strong); }
 
     .card-body { padding: 40px 44px; color: var(--text-mid); }
     .card-section { margin-bottom: 0; }
@@ -1135,7 +1135,7 @@ function buildPresentationHTML() {
     .ctag { font-size: 12px; padding: 6px 14px; border-radius: 6px; background: var(--bg-subtle); color: var(--text-mid); }
     .ctag-key { background: ${v.colorPrimary}1a; color: var(--primary); font-weight: 600; }
     .fit-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
-    .fit-item { background: var(--bg-subtle); padding: 14px 16px; border-radius: 8px; }
+    .fit-item { background: var(--bg-subtle); padding: 14px 16px; border-radius: 8px; border: 1px solid var(--border-strong); }
     .fit-label { font-size: 12px; color: var(--text-mid); line-height: 1.5; }
     .strength-bars { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 24px; }
     .bar-item { display: flex; flex-direction: column; gap: 6px; }
