@@ -1507,6 +1507,70 @@ function buildResumeHTML(c, v) {
 </html>`;
 }
 
+// Fetch resume content from link (PDF binary or HTML text)
+async function fetchResumeContent(url) {
+  if (!url) return null;
+  try {
+    // S3/direct PDF links: fetch binary and convert to base64
+    if (url.match(/\.pdf($|\?)/i) || url.includes('s3.') || url.includes('s3-')) {
+      const resp = await fetch(url, { signal: AbortSignal.timeout(15000) });
+      if (!resp.ok) throw new Error('PDF fetch failed: ' + resp.status);
+      const blob = await resp.blob();
+      if (blob.size > 5 * 1024 * 1024) throw new Error('PDF too large');
+      return { type: 'pdf', data: blob };
+    }
+    // Profile pages: try CORS proxy to get HTML text
+    const html = await fetchWithProxy(url);
+    if (html && html.length > 200) {
+      // Strip HTML tags, keep text
+      const tmp = document.createElement('div');
+      tmp.innerHTML = html;
+      // Remove scripts/styles
+      tmp.querySelectorAll('script,style,nav,footer,header').forEach(el => el.remove());
+      const text = tmp.textContent.replace(/\s+/g, ' ').trim();
+      if (text.length > 100) return { type: 'text', data: text.slice(0, 8000) };
+    }
+  } catch(e) {
+    console.log('Resume fetch failed for ' + url + ':', e.message);
+  }
+  return null;
+}
+
+// Send PDF to Claude for resume extraction
+async function extractResumeFromPDF(pdfBlob, candidateName, roleTitle) {
+  // Convert PDF to base64
+  const buffer = await pdfBlob.arrayBuffer();
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+  const base64 = btoa(binary);
+
+  // Call Claude with PDF document
+  const resp = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': _ak_get(),
+      'anthropic-version': '2023-06-01',
+      'anthropic-dangerous-direct-browser-access': 'true'
+    },
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 2000,
+      messages: [{
+        role: 'user',
+        content: [
+          { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: base64 } },
+          { type: 'text', text: 'Extract ALL content from this resume for ' + candidateName + ' (applying for ' + roleTitle + '). Copy EVERYTHING exactly as written. Do not summarize or skip anything.\n\nReturn ONLY valid JSON (no markdown, no code fences):\n{"summary":"Copy their professional summary/objective if present, otherwise write a brief 2-3 sentence summary from their experience. Max 150 words.","skillCategories":[{"category":"Category Name","skills":"Skill 1, Skill 2, Skill 3"}],"experience":[{"role":"Exact Job Title","company":"Exact Company Name","dates":"Exact dates as written","description":"Copy ALL bullet points from this role. Separate each bullet with a newline character."}],"education":[{"degree":"Exact Degree","school":"Exact School Name","year":"Year"}],"certifications":["Exact cert names"],"languages":[{"name":"Language","level":"Level"}]}' }
+        ]
+      }]
+    })
+  });
+  const data = await resp.json();
+  if (data.content?.[0]?.text) return data.content[0].text.trim();
+  throw new Error('Claude PDF extraction failed');
+}
+
 // Generate structured resume data from AI
 async function generateResumeData() {
   if (candidates.length === 0) return;
@@ -1515,39 +1579,53 @@ async function generateResumeData() {
 
   for (let i = 0; i < candidates.length; i++) {
     const c = candidates[i];
-    if (c.resumeData?.fullExtract) continue; // Only skip if we already did the full extraction
+    if (c.resumeData?.fullExtract) continue;
 
-    showAIStatus('loading', 'Building resume for ' + c.name + ' (' + (i + 1) + '/' + candidates.length + ')...');
+    showAIStatus('loading', 'Reading resume for ' + c.name + ' (' + (i + 1) + '/' + candidates.length + ')...');
 
     try {
-      // Collect everything we know about this candidate
-      const allInfo = [
-        c.name ? 'Name: ' + c.name : '',
-        v.roleTitle ? 'Role: ' + v.roleTitle : '',
-        c.location ? 'Location: ' + c.location : '',
-        c.experience ? 'Experience: ' + c.experience : '',
-        c.skills ? 'Skills: ' + c.skills : '',
-        c.summary ? 'Why/Strengths:\n' + c.summary : '',
-        c.recruiterNote ? 'Recruiter note: ' + c.recruiterNote : '',
-        c.resumeData?.experience?.length ? 'Work history:\n' + c.resumeData.experience.map(e =>
-          (e.role || '') + ' at ' + (e.company || '') + ' (' + (e.dates || '') + ')' + (e.description ? ': ' + e.description : '')
-        ).join('\n') : ''
-      ].filter(Boolean).join('\n');
+      let aiText = null;
 
-      const prompt = 'TASK: Structure a professional resume from the candidate data below.\n\n' +
-        'RULES:\n' +
-        '- ONLY use information explicitly stated. NEVER fabricate companies, roles, dates, schools, or certifications.\n' +
-        '- Summary: max 150 words. Professional, factual, third person.\n' +
-        '- Skills: group into logical categories (e.g. "Frontend", "Backend", "Tools", "Soft Skills").\n' +
-        '- Experience: for each role, write 2-3 concise bullet points about what they did. Separate bullets with newlines.\n' +
-        '- Education: include degree, school, year if known.\n' +
-        '- If a section has no data, return an empty array.\n\n' +
-        'CANDIDATE DATA:\n' + allInfo + '\n\n' +
-        'Return ONLY valid JSON (no markdown, no code fences):\n' +
-        '{"summary":"Professional summary under 150 words","skillCategories":[{"category":"Category","skills":"Skill1, Skill2"}],"experience":[{"role":"Title","company":"Company","dates":"Dates","description":"Bullet 1\\nBullet 2\\nBullet 3"}],"education":[{"degree":"Degree","school":"School","year":"Year"}],"certifications":["Only real ones"],"languages":[{"name":"Lang","level":"Level"}]}';
+      // STEP 1: Try to fetch and read the actual resume
+      const resumeContent = await fetchResumeContent(c.resumeLink);
 
-      const text = await callAI(prompt, 1200);
-      let jsonStr = text;
+      if (resumeContent?.type === 'pdf') {
+        // Send PDF directly to Claude for extraction
+        showAIStatus('loading', 'Extracting resume content for ' + c.name + '...');
+        aiText = await extractResumeFromPDF(resumeContent.data, c.name, v.roleTitle);
+      } else if (resumeContent?.type === 'text') {
+        // Send extracted text to AI for structuring
+        showAIStatus('loading', 'Structuring resume for ' + c.name + '...');
+        const prompt = 'Extract ALL resume content for ' + c.name + ' from the text below. Copy EVERYTHING exactly. Do not summarize or skip.\n\n' +
+          'RESUME TEXT:\n' + resumeContent.data + '\n\n' +
+          'Return ONLY valid JSON (no markdown, no code fences):\n' +
+          '{"summary":"Their professional summary or a brief 2-3 sentence one from their experience. Max 150 words.","skillCategories":[{"category":"Category","skills":"Skill1, Skill2"}],"experience":[{"role":"Exact Title","company":"Exact Company","dates":"Exact dates","description":"Copy ALL bullet points. Separate with newlines."}],"education":[{"degree":"Degree","school":"School","year":"Year"}],"certifications":["Exact names"],"languages":[{"name":"Lang","level":"Level"}]}';
+        aiText = await callAI(prompt, 2000);
+      } else {
+        // No resume file accessible. Use available data.
+        showAIStatus('loading', 'Building resume for ' + c.name + ' from available data...');
+        const allInfo = [
+          c.name ? 'Name: ' + c.name : '',
+          v.roleTitle ? 'Role: ' + v.roleTitle : '',
+          c.location ? 'Location: ' + c.location : '',
+          c.experience ? 'Experience: ' + c.experience : '',
+          c.skills ? 'Skills: ' + c.skills : '',
+          c.summary ? 'Strengths:\n' + c.summary : '',
+          c.recruiterNote ? 'Recruiter note: ' + c.recruiterNote : '',
+          c.resumeData?.experience?.length ? 'Work history:\n' + c.resumeData.experience.map(e =>
+            (e.role || '') + ' at ' + (e.company || '') + ' (' + (e.dates || '') + ')' + (e.description ? ': ' + e.description : '')
+          ).join('\n') : ''
+        ].filter(Boolean).join('\n');
+
+        const prompt = 'Structure a resume from this candidate data. ONLY use information explicitly stated. NEVER fabricate companies, roles, dates, schools, or certifications. If a section has no data, return empty array.\n\n' +
+          'CANDIDATE DATA:\n' + allInfo + '\n\n' +
+          'Return ONLY valid JSON (no markdown, no code fences):\n' +
+          '{"summary":"Professional summary, max 150 words. Factual, third person.","skillCategories":[{"category":"Category","skills":"Skill1, Skill2"}],"experience":[{"role":"Title","company":"Company","dates":"Dates","description":"2-3 bullets per role. Separate with newlines."}],"education":[{"degree":"Degree","school":"School","year":"Year"}],"certifications":["Only real ones"],"languages":[{"name":"Lang","level":"Level"}]}';
+        aiText = await callAI(prompt, 1500);
+      }
+
+      // Parse the JSON response
+      let jsonStr = aiText;
       jsonStr = jsonStr.replace(/^[\s\S]*?```(?:json)?\s*\n?/i, '').replace(/\n?\s*```[\s\S]*$/, '');
       if (!jsonStr.trim().startsWith('{')) { const m = jsonStr.match(/\{[\s\S]*\}/); if (m) jsonStr = m[0]; }
       jsonStr = jsonStr.trim();
@@ -1556,7 +1634,6 @@ async function generateResumeData() {
       c.resumeData.fullExtract = true;
     } catch(err) {
       console.error('Resume data failed for ' + c.name + ':', err);
-      // Fallback: build resume from existing data instead of empty
       const existingExp = c.resumeData?.experience || [];
       c.resumeData = {
         summary: c.recruiterNote || c.summary || '',
@@ -1565,7 +1642,7 @@ async function generateResumeData() {
         education: [],
         certifications: [],
         languages: [],
-        fullExtract: existingExp.length > 0 // Don't retry if we have jobs
+        fullExtract: existingExp.length > 0
       };
     }
   }
@@ -1880,7 +1957,7 @@ ${allCandsSummary}
 THIS CANDIDATE (#${i+1}/${candidates.length}):
 Name: ${c.name} | Location: ${c.location || '?'} | Salary: ${c.salary || '?'}/mo | TAP: ${c.tap ? 'Yes' : 'No'}
 ${c.experience ? 'Experience: ' + c.experience : ''} ${c.skills ? '| Skills: ' + c.skills : ''}
-${c.resumeUrl ? 'Resume: ' + c.resumeUrl : ''}
+${c.resumeLink ? 'Resume: ' + c.resumeLink : ''}
 ${c.summary ? 'Raw notes: ' + c.summary.slice(0, 500) : ''}
 
 EXAMPLE OF EXACTLY WHAT I WANT (study the rhythm, specificity, and sommelier flair):
