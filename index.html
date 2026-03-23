@@ -1237,10 +1237,10 @@ function buildPresentationHTML() {
     </div>
   </section>
 
-  ${v.introNote ? `
+  ${v.introNote && v.introNote.trim() ? `
   <div class="intro-note">
     <div class="intro-card">
-      <p>${escHTML(v.introNote).replace(/\\n/g, '</p><p>')}</p>
+      <p>${escHTML(v.introNote).replace(/\n/g, '</p><p>')}</p>
     </div>
   </div>` : ''}
 
