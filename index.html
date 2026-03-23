@@ -1492,10 +1492,10 @@ function buildResumeHTML(c, v) {
     </div>
   </div>
   <div class="resume-body">
-    ${summaryText ? `<div class="section"><div class="section-title">Summary</div><p class="summary-text">${escHTML(summaryText.replace(/\\n/g, ' ').replace(/^[-•*]\s*/gm, ''))}</p></div>` : ''}
-    ${skillsGridSection ? `<div class="section"><div class="section-title">Skills</div><div class="skills-grid">${skillsGridSection}</div></div>` : ''}
-    ${experienceSection ? `<div class="section"><div class="section-title">Work Experience</div>${experienceSection}</div>` : ''}
-    ${educationSection ? `<div class="section"><div class="section-title">Education</div>${educationSection}</div>` : ''}
+    <div class="section"><div class="section-title">Professional Summary</div><p class="summary-text">${summaryText ? escHTML(summaryText.replace(/\\n/g, ' ').replace(/^[-•*]\s*/gm, '').split(/\s+/).slice(0, 150).join(' ')) : 'Summary available upon request.'}</p></div>
+    <div class="section"><div class="section-title">Skills &amp; Tech Stack</div><div class="skills-grid">${skillsGridSection || `<div class="skill-label">Core Skills</div><div class="skill-value">${escHTML(skills.join(', ') || 'Details available upon request.')}</div>`}</div></div>
+    <div class="section"><div class="section-title">Work Experience</div>${experienceSection || '<p class="summary-text">Experience details available upon request.</p>'}</div>
+    <div class="section"><div class="section-title">Education</div>${educationSection || '<p class="summary-text">Education details available upon request.</p>'}</div>
     ${certsSection ? `<div class="section"><div class="section-title">Certifications</div>${certsSection}</div>` : ''}
     ${langsSection ? `<div class="section"><div class="section-title">Languages</div>${langsSection}</div>` : ''}
   </div>
@@ -1534,14 +1534,17 @@ async function generateResumeData() {
         ).join('\n') : ''
       ].filter(Boolean).join('\n');
 
-      const prompt = 'TASK: Extract and structure a professional resume from the candidate data below. ' +
-        'ONLY use information that is explicitly stated or clearly implied. ' +
-        'NEVER fabricate, infer, or guess companies, roles, dates, schools, or certifications that are not mentioned. ' +
-        'If a section has no data, return an empty array for it. ' +
-        'For experience descriptions, use the strengths/notes to write 2-3 bullet points about what they did in each role. Keep it factual.\n\n' +
+      const prompt = 'TASK: Structure a professional resume from the candidate data below.\n\n' +
+        'RULES:\n' +
+        '- ONLY use information explicitly stated. NEVER fabricate companies, roles, dates, schools, or certifications.\n' +
+        '- Summary: max 150 words. Professional, factual, third person.\n' +
+        '- Skills: group into logical categories (e.g. "Frontend", "Backend", "Tools", "Soft Skills").\n' +
+        '- Experience: for each role, write 2-3 concise bullet points about what they did. Separate bullets with newlines.\n' +
+        '- Education: include degree, school, year if known.\n' +
+        '- If a section has no data, return an empty array.\n\n' +
         'CANDIDATE DATA:\n' + allInfo + '\n\n' +
-        'Return ONLY valid JSON (no markdown):\n' +
-        '{"summary":"2-3 sentence professional summary based on actual data","skillCategories":[{"category":"Category Name","skills":"Skill 1, Skill 2, Skill 3"}],"experience":[{"role":"Actual Job Title","company":"Actual Company","dates":"Actual dates","description":"What they actually did, based on notes. 2-3 bullet points separated by newlines."}],"education":[{"degree":"Degree","school":"School","year":"Year"}],"certifications":["Only real ones mentioned"],"languages":[{"name":"Language","level":"Level"}]}';
+        'Return ONLY valid JSON (no markdown, no code fences):\n' +
+        '{"summary":"Professional summary under 150 words","skillCategories":[{"category":"Category","skills":"Skill1, Skill2"}],"experience":[{"role":"Title","company":"Company","dates":"Dates","description":"Bullet 1\\nBullet 2\\nBullet 3"}],"education":[{"degree":"Degree","school":"School","year":"Year"}],"certifications":["Only real ones"],"languages":[{"name":"Lang","level":"Level"}]}';
 
       const text = await callAI(prompt, 1200);
       let jsonStr = text;
