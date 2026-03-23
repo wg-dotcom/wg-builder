@@ -1323,95 +1323,95 @@ function generateCandidateCard(c, idx, v) {
   // Strength bullets from summary
   const strengthBullets = (() => {
     if (!c.summary) return [];
-    let bullets = c.summary.split('\\n').filter(s => s.trim());
-    if (bullets.length <= 1) bullets = c.summary.split(/(?<=\\.)\\s+/).filter(s => s.trim() && s.length > 10);
-    return bullets.slice(0, 5).map(s => s.replace(/^[-•*]\\s*/, '').trim());
+    let bullets = c.summary.split('\n').filter(s => s.trim());
+    if (bullets.length <= 1) bullets = c.summary.split(/(?<=\.)\s+/).filter(s => s.trim() && s.length > 10);
+    return bullets.slice(0, 5).map(s => s.replace(/^[-•*]\s*/, '').trim());
   })();
 
   // Strength bars (top 6 skills with pseudo-scores based on position)
   const barSkills = skills.slice(0, 6);
   const barScores = [95, 90, 88, 85, 82, 78];
 
-  return \`
+  return `
     <div class="candidate-card">
-      <div class="card\${idx === 0 ? ' featured' : ''}" id="candidate-\${idx}">
+      <div class="card${idx === 0 ? ' featured' : ''}" id="candidate-${idx}">
         <div class="card-top">
           <div class="card-identity">
-            <div class="card-avatar\${idx === 0 ? ' featured-avatar' : ''}">\${initials}</div>
+            <div class="card-avatar${idx === 0 ? ' featured-avatar' : ''}">${initials}</div>
             <div>
-              <div class="card-name">\${escHTML(c.name)}</div>
+              <div class="card-name">${escHTML(c.name)}</div>
               <div class="card-location">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
-                \${escHTML(c.location || 'Remote')} &middot; \${escHTML(c.experience || '')}
+                ${escHTML(c.location || 'Remote')} &middot; ${escHTML(c.experience || '')}
               </div>
               <div class="card-badges">
-                \${c.tap ? '<span class="badge badge-shortlisted">★ TAP Certified</span>' : ''}
-                \${idx === 0 ? '<span class="badge badge-shortlisted">Pre-Shortlisted</span>' : ''}
+                ${c.tap ? '<span class="badge badge-shortlisted">★ TAP Certified</span>' : ''}
+                ${idx === 0 ? '<span class="badge badge-shortlisted">Pre-Shortlisted</span>' : ''}
               </div>
             </div>
           </div>
           <div class="card-rate">
-            <div class="card-rate-amount">\${escHTML(fmtNum(c.salary || v.salaryRange) || 'TBD')}</div>
+            <div class="card-rate-amount">${escHTML(fmtNum(c.salary || v.salaryRange) || 'TBD')}</div>
             <div class="card-rate-period">USD / Month</div>
           </div>
         </div>
 
         <div class="card-body">
-          \${c.recruiterNote ? \`
+          ${c.recruiterNote ? `
           <div class="card-narrative">
-            \${escHTML(c.recruiterNote)}
-          </div>\` : ''}
+            ${escHTML(c.recruiterNote)}
+          </div>` : ''}
 
-          \${expEntries.length ? \`
+          ${expEntries.length ? `
           <div class="card-section-title">Experience Highlights</div>
           <div class="experience-list">
-            \${expEntries.map((exp, i) => \`
+            ${expEntries.map((exp, i) => `
             <div class="exp-item">
               <div class="exp-dot-col">
                 <div class="exp-dot"></div>
-                \${i < expEntries.length - 1 ? '<div class="exp-line"></div>' : ''}
+                ${i < expEntries.length - 1 ? '<div class="exp-line"></div>' : ''}
               </div>
               <div class="exp-content">
-                <div class="exp-role">\${escHTML(exp.role)}</div>
-                <div class="exp-company">\${escHTML(exp.company)}\${exp.dates ? ' &middot; ' + escHTML(exp.dates) : ''}</div>
-                \${exp.description ? '<div class="exp-highlight">' + escHTML(exp.description.split('\\n')[0]) + '</div>' : ''}
+                <div class="exp-role">${escHTML(exp.role)}</div>
+                <div class="exp-company">${escHTML(exp.company)}${exp.dates ? ' &middot; ' + escHTML(exp.dates) : ''}</div>
+                ${exp.description ? '<div class="exp-highlight">' + escHTML(exp.description.split('\n')[0]) + '</div>' : ''}
               </div>
-            </div>\`).join('')}
-          </div>\` : ''}
+            </div>`).join('')}
+          </div>` : ''}
 
-          \${skills.length ? \`
+          ${skills.length ? `
           <div class="card-section-title">Platforms &amp; Tools</div>
           <div class="tags-cluster">
-            \${keySkills.map(s => '<span class="ctag ctag-key">' + escHTML(s) + '</span>').join('')}
-            \${otherSkills.map(s => '<span class="ctag">' + escHTML(s) + '</span>').join('')}
-          </div>\` : ''}
+            ${keySkills.map(s => '<span class="ctag ctag-key">' + escHTML(s) + '</span>').join('')}
+            ${otherSkills.map(s => '<span class="ctag">' + escHTML(s) + '</span>').join('')}
+          </div>` : ''}
 
-          \${strengthBullets.length ? \`
-          <div class="card-section-title">\${escHTML(v.clientName)} Fit Indicators</div>
+          ${strengthBullets.length ? `
+          <div class="card-section-title">${escHTML(v.clientName)} Fit Indicators</div>
           <div class="fit-grid">
-            \${strengthBullets.slice(0, 3).map(s => \`
+            ${strengthBullets.slice(0, 3).map(s => `
             <div class="fit-item">
-              <div class="fit-label">\${escHTML(s.length > 50 ? s.slice(0, 50) + '...' : s)}</div>
-            </div>\`).join('')}
-          </div>\` : ''}
+              <div class="fit-label">${escHTML(s.length > 50 ? s.slice(0, 50) + '...' : s)}</div>
+            </div>`).join('')}
+          </div>` : ''}
 
-          \${barSkills.length ? \`
+          ${barSkills.length ? `
           <div class="card-section-title">Strength Profile</div>
           <div class="strength-bars">
-            \${barSkills.map((s, i) => \`
+            ${barSkills.map((s, i) => `
             <div class="bar-item">
-              <div class="bar-label">\${escHTML(s)}</div>
-              <div class="bar-track"><div class="bar-fill" style="width:\${barScores[i] || 75}%"></div></div>
-            </div>\`).join('')}
-          </div>\` : ''}
+              <div class="bar-label">${escHTML(s)}</div>
+              <div class="bar-track"><div class="bar-fill" style="width:${barScores[i] || 75}%"></div></div>
+            </div>`).join('')}
+          </div>` : ''}
 
           <div class="card-actions">
-            \${c.videoLink ? \`<a class="video-intro-btn" href="\${escHTML(c.videoLink)}" target="_blank"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>Watch Intro Video</a>\` : ''}
-            \${c.tap ? \`<a class="video-intro-btn" href="https://drive.google.com/file/d/1lvb0EWiOoIzbKKFGXN0IiuDjdGYOZdHC/view" target="_blank"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>TAP Info</a>\` : ''}
+            ${c.videoLink ? `<a class="video-intro-btn" href="${escHTML(c.videoLink)}" target="_blank"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>Watch Intro Video</a>` : ''}
+            ${c.tap ? `<a class="video-intro-btn" href="https://drive.google.com/file/d/1lvb0EWiOoIzbKKFGXN0IiuDjdGYOZdHC/view" target="_blank"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>TAP Info</a>` : ''}
           </div>
         </div>
       </div>
-    </div>\`;
+    </div>`;
 }
 
 function buildResumeHTML(c, v) {
