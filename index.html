@@ -589,7 +589,17 @@ async function extractBranding() {
   // Global timeout
   const brandingTimeout = setTimeout(() => {
     showBrandStatus('error', 'Detection timed out. Enter colors, fonts, and logo manually.');
-  }, 30000);
+  }, 35000);
+
+  // Reset form to defaults before detecting
+  document.getElementById('colorPrimaryHex').value = '#0D9488';
+  document.getElementById('colorPrimary').value = '#0D9488';
+  document.getElementById('colorDarkHex').value = '#131A1B';
+  document.getElementById('colorDark').value = '#131A1B';
+  document.getElementById('colorHighlightHex').value = '#00F9B8';
+  document.getElementById('colorHighlight').value = '#00F9B8';
+  document.getElementById('fontHeading').value = 'Inter';
+  document.getElementById('fontBody').value = 'DM Sans';
 
   let logo = '';
   let detectedColors = { primary: '', dark: '', highlight: '' };
@@ -597,11 +607,15 @@ async function extractBranding() {
   let method = '';
 
   // ── STEP 1: Screenshot site + CORS fetch in parallel ──
-  const screenshotUrl = 'https://image.thum.io/get/width/1280/wait/3/' + url;
+  // thum.io needs /wait/5/ to avoid returning loading GIF for JS-heavy sites
+  const screenshotUrl = 'https://image.thum.io/get/width/1280/wait/5/' + url;
+  console.log('[BRAND] Fetching screenshot:', screenshotUrl);
   const [screenshotResult, htmlResult] = await Promise.allSettled([
-    fetch(screenshotUrl, { signal: AbortSignal.timeout(15000) }).then(r => r.ok ? r.blob() : null).catch(() => null),
+    fetch(screenshotUrl, { signal: AbortSignal.timeout(20000) }).then(r => r.ok ? r.blob() : null).catch(() => null),
     fetchWithProxy(url).catch(() => null)
   ]);
+  console.log('[BRAND] Screenshot blob:', screenshotResult.status === 'fulfilled' && screenshotResult.value ? screenshotResult.value.size + ' bytes' : 'FAILED');
+  console.log('[BRAND] CORS HTML:', htmlResult.status === 'fulfilled' && htmlResult.value ? htmlResult.value.length + ' chars' : 'FAILED');
 
   // ── STEP 2: Extract logo + fonts from HTML (CORS scrape) ──
   const siteHtml = htmlResult.status === 'fulfilled' ? htmlResult.value : null;
@@ -641,7 +655,8 @@ async function extractBranding() {
 
   // ── STEP 3: Send screenshot to Claude Vision for brand analysis ──
   const screenshotBlob = screenshotResult.status === 'fulfilled' ? screenshotResult.value : null;
-  if (screenshotBlob && screenshotBlob.size > 10000) {
+  console.log('[BRAND] Screenshot blob size:', screenshotBlob ? screenshotBlob.size : 'null');
+  if (screenshotBlob && screenshotBlob.size > 5000) {
     showBrandStatus('loading', 'AI analyzing website design...');
     try {
       // Convert blob to base64
@@ -685,8 +700,11 @@ async function extractBranding() {
         if (ai.fontHeading && !detectedFonts.heading) detectedFonts.heading = ai.fontHeading;
         if (ai.fontBody && !detectedFonts.body) detectedFonts.body = ai.fontBody;
         method = 'vision';
+        console.log('[BRAND] Vision detected:', JSON.stringify(detectedColors));
+      } else {
+        console.log('[BRAND] Vision API error:', JSON.stringify(visionData.error || visionData).substring(0, 200));
       }
-    } catch(e) { console.log('Vision brand analysis failed:', e.message); }
+    } catch(e) { console.log('[BRAND] Vision failed:', e.message); }
   }
 
   // ── STEP 3B: Fallback to CSS-based AI if vision failed ──
