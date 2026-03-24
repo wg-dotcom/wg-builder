@@ -584,41 +584,27 @@ async function extractBranding() {
   if (!url) { showBrandStatus('error', 'Enter a customer website URL first.'); return; }
   if (!/^https?:\/\//i.test(url)) { url = 'https://' + url; document.getElementById('clientUrl').value = url; }
 
-  showBrandStatus('loading', 'Detecting brand identity...');
+  showBrandStatus('loading', 'Screenshotting website...');
 
   // Global timeout
   const brandingTimeout = setTimeout(() => {
     showBrandStatus('error', 'Detection timed out. Enter colors, fonts, and logo manually.');
-  }, 20000);
+  }, 30000);
 
   let logo = '';
   let detectedColors = { primary: '', dark: '', highlight: '' };
   let detectedFonts = { heading: '', body: '' };
   let method = '';
 
-  // ─── RUN CORS SCRAPE + AI IN PARALLEL ───
-  const brandPrompt = `Based on your training data knowledge of the website ${url}, provide the brand identity colors and fonts.
+  // ── STEP 1: Screenshot site + CORS fetch in parallel ──
+  const screenshotUrl = 'https://image.thum.io/get/width/1280/wait/3/' + url;
+  const [screenshotResult, htmlResult] = await Promise.allSettled([
+    fetch(screenshotUrl, { signal: AbortSignal.timeout(15000) }).then(r => r.ok ? r.blob() : null).catch(() => null),
+    fetchWithProxy(url).catch(() => null)
+  ]);
 
-You have seen this website's CSS and design in your training data. Use that knowledge to provide the brand colors. If you haven't seen this specific site, make your best informed estimate based on the company name and industry.
-
-Return ONLY a JSON object with these fields:
-- primary: Main brand color (buttons, links, CTAs). Must be saturated, NEVER #333333 or generic gray/black.
-- dark: Darkest color from their headers/hero/footer. Deep and rich.
-- highlight: Secondary accent color that contrasts with the dark. For badges, hover states.
-- fontHeading: Google Fonts name for headings. Map proprietary fonts to closest match (Helvetica Neue=Inter, Futura=Poppins, Circular=DM Sans, Freight=Lora).
-- fontBody: Google Fonts name for body text.
-- logoUrl: Direct URL to logo image, or "" if unknown.
-
-ONLY output JSON. No explanation. No caveats. No "I can't visit websites." Just the JSON.
-{"primary":"#XXXXXX","dark":"#XXXXXX","highlight":"#XXXXXX","fontHeading":"Name","fontBody":"Name","logoUrl":""}`;
-
-  // ── STEP 1: Fetch site HTML via CORS ──
-  showBrandStatus('loading', 'Fetching site...');
-  let siteHtml = null;
-  try { siteHtml = await fetchWithProxy(url); } catch(e) { console.log('CORS fetch failed:', e.message); }
-
-  // ── STEP 2: Extract logo + fonts + raw CSS signals from HTML ──
-  let cssSignals = '';
+  // ── STEP 2: Extract logo + fonts from HTML (CORS scrape) ──
+  const siteHtml = htmlResult.status === 'fulfilled' ? htmlResult.value : null;
   if (siteHtml) {
     const parser = new DOMParser();
     const doc = parser.parseFromString(siteHtml, 'text/html');
@@ -651,56 +637,75 @@ ONLY output JSON. No explanation. No caveats. No "I can't visit websites." Just 
     });
     if (gfNames.length >= 2) { detectedFonts.heading = gfNames[0]; detectedFonts.body = gfNames[1]; }
     else if (gfNames.length === 1) { detectedFonts.heading = gfNames[0]; if (!detectedFonts.body) detectedFonts.body = gfNames[0]; }
-
-    // Collect ALL colors from inline CSS (vars + hex values in properties)
-    const cssText = Array.from(doc.querySelectorAll('style')).map(s => s.textContent).join(' ');
-    const allColors = new Set();
-    for (const m of cssText.matchAll(/#[0-9a-fA-F]{6}/g)) allColors.add(m[0]);
-    const allVars = {};
-    for (const m of cssText.matchAll(/--([a-zA-Z0-9_-]+):\s*(#[0-9a-fA-F]{3,8})/gi)) allVars[m[1]] = m[2];
-
-    // Collect font-family declarations
-    const allFontFamilies = new Set();
-    for (const m of cssText.matchAll(/font-family:\s*['"]?([^'";,}]+)/gi)) allFontFamilies.add(m[1].trim());
-
-    cssSignals = 'CSS VARIABLES:\n' + Object.entries(allVars).slice(0, 30).map(([k,v]) => `  --${k}: ${v}`).join('\n') +
-      '\n\nTOP COLORS FOUND: ' + [...allColors].slice(0, 20).join(', ') +
-      '\n\nFONT FAMILIES: ' + [...allFontFamilies].slice(0, 10).join(', ') +
-      (gfNames.length ? '\n\nGOOGLE FONTS LOADED: ' + gfNames.join(', ') : '');
-
-    method = 'site-scan';
   }
 
-  // ── STEP 3: Send CSS signals to Claude for intelligent interpretation ──
-  showBrandStatus('loading', 'Using AI to identify brand...');
-  const smartPrompt = cssSignals
-    ? `You are a brand identity expert. Analyze these CSS signals from ${url} and identify the brand colors and fonts.
+  // ── STEP 3: Send screenshot to Claude Vision for brand analysis ──
+  const screenshotBlob = screenshotResult.status === 'fulfilled' ? screenshotResult.value : null;
+  if (screenshotBlob && screenshotBlob.size > 10000) {
+    showBrandStatus('loading', 'AI analyzing website design...');
+    try {
+      // Convert blob to base64
+      const arrayBuf = await screenshotBlob.arrayBuffer();
+      const bytes = new Uint8Array(arrayBuf);
+      let binary = '';
+      for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+      const b64 = btoa(binary);
+      const mimeType = screenshotBlob.type || 'image/png';
 
-${cssSignals}
+      // Send to Claude Vision
+      const visionResp = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST', signal: AbortSignal.timeout(20000),
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': _ak_get(),
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true'
+        },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 200,
+          messages: [{
+            role: 'user',
+            content: [
+              { type: 'image', source: { type: 'base64', media_type: mimeType, data: b64 } },
+              { type: 'text', text: 'Look at this website screenshot. Extract the brand identity:\n- primary: Main brand color (buttons, links, nav). A saturated color, NOT gray/black/white.\n- dark: Darkest background color (hero, header, footer).\n- highlight: Secondary accent (CTAs, badges). Contrasts with dark.\n- fontHeading: Closest Google Fonts match for headings.\n- fontBody: Closest Google Fonts match for body text.\n\nReturn ONLY JSON: {"primary":"#XXXXXX","dark":"#XXXXXX","highlight":"#XXXXXX","fontHeading":"Name","fontBody":"Name"}' }
+            ]
+          }]
+        })
+      });
+      const visionData = await visionResp.json();
+      if (visionResp.ok && visionData.content?.[0]) {
+        let json = visionData.content[0].text;
+        json = json.replace(/^[\s\S]*?```(?:json)?\s*\n?/i, '').replace(/\n?\s*```[\s\S]*$/, '');
+        if (!json.trim().startsWith('{')) { const m = json.match(/\{[\s\S]*\}/); if (m) json = m[0]; }
+        const ai = JSON.parse(json);
+        if (ai.primary && /^#[0-9a-fA-F]{6}$/.test(ai.primary)) detectedColors.primary = ai.primary;
+        if (ai.dark && /^#[0-9a-fA-F]{6}$/.test(ai.dark)) detectedColors.dark = ai.dark;
+        if (ai.highlight && /^#[0-9a-fA-F]{6}$/.test(ai.highlight)) detectedColors.highlight = ai.highlight;
+        if (ai.fontHeading && !detectedFonts.heading) detectedFonts.heading = ai.fontHeading;
+        if (ai.fontBody && !detectedFonts.body) detectedFonts.body = ai.fontBody;
+        method = 'vision';
+      }
+    } catch(e) { console.log('Vision brand analysis failed:', e.message); }
+  }
 
-Based on these ACTUAL CSS signals, identify:
-- primary: The main brand color (used on buttons, links, CTAs). Pick the most prominent saturated color. NEVER #333333 or generic gray.
-- dark: The darkest brand color (headers, hero backgrounds). Usually the deepest shade.
-- highlight: A secondary accent that contrasts with dark. For CTAs, badges.
-- fontHeading: The heading/display font (from Google Fonts loaded or font-family declarations). Use exact Google Fonts name.
-- fontBody: The body text font. Use exact Google Fonts name.
-
-Return ONLY JSON: {"primary":"#XXXXXX","dark":"#XXXXXX","highlight":"#XXXXXX","fontHeading":"Name","fontBody":"Name"}`
-    : brandPrompt; // Fall back to URL-only prompt if no CSS
-
-  try {
-    let json = await callAI_premium(smartPrompt, 200);
-    json = json.replace(/^[\s\S]*?\`\`\`(?:json)?\s*\n?/i, '').replace(/\n?\s*\`\`\`[\s\S]*$/, '');
-    if (!json.trim().startsWith('{')) { const m = json.match(/\{[\s\S]*\}/); if (m) json = m[0]; }
-    const ai = JSON.parse(json);
-    if (ai.primary && /^#[0-9a-fA-F]{6}$/.test(ai.primary)) detectedColors.primary = ai.primary;
-    if (ai.dark && /^#[0-9a-fA-F]{6}$/.test(ai.dark)) detectedColors.dark = ai.dark;
-    if (ai.highlight && /^#[0-9a-fA-F]{6}$/.test(ai.highlight)) detectedColors.highlight = ai.highlight;
-    if (ai.fontHeading && !detectedFonts.heading) detectedFonts.heading = ai.fontHeading;
-    if (ai.fontBody && !detectedFonts.body) detectedFonts.body = ai.fontBody;
-    if (ai.logoUrl && !logo) logo = ai.logoUrl;
-    if (method) method += ' + ai'; else method = 'ai';
-  } catch(e) { console.log('AI brand analysis failed:', e.message); }
+  // ── STEP 3B: Fallback to CSS-based AI if vision failed ──
+  if (!detectedColors.primary) {
+    showBrandStatus('loading', 'Using AI to identify brand...');
+    try {
+      const fallbackPrompt = 'Based on your knowledge of ' + url + ', provide the brand colors and fonts. Return ONLY JSON: {"primary":"#XXXXXX","dark":"#XXXXXX","highlight":"#XXXXXX","fontHeading":"Name","fontBody":"Name"}';
+      let json = await callAI_premium(fallbackPrompt, 200);
+      json = json.replace(/^[\s\S]*?```(?:json)?\s*\n?/i, '').replace(/\n?\s*```[\s\S]*$/, '');
+      if (!json.trim().startsWith('{')) { const m = json.match(/\{[\s\S]*\}/); if (m) json = m[0]; }
+      const ai = JSON.parse(json);
+      if (ai.primary && /^#[0-9a-fA-F]{6}$/.test(ai.primary)) detectedColors.primary = ai.primary;
+      if (ai.dark && /^#[0-9a-fA-F]{6}$/.test(ai.dark)) detectedColors.dark = ai.dark;
+      if (ai.highlight && /^#[0-9a-fA-F]{6}$/.test(ai.highlight)) detectedColors.highlight = ai.highlight;
+      if (ai.fontHeading && !detectedFonts.heading) detectedFonts.heading = ai.fontHeading;
+      if (ai.fontBody && !detectedFonts.body) detectedFonts.body = ai.fontBody;
+      if (!method) method = 'ai-fallback';
+    } catch(e) { console.log('AI fallback failed:', e.message); }
+  }
 
   // ─── STEP 3: LOGO RELIABILITY CHAIN ───
   // Test if a URL loads as a valid image
