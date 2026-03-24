@@ -434,7 +434,35 @@ function _gk_get() { return _gk.map(c => String.fromCharCode(c)).join(''); }
 const _qk = [103,115,107,95,110,85,117,114,105,50,89,69,102,49,97,120,74,79,112,90,89,105,114,72,87,71,100,121,98,51,70,89,85,101,122,98,56,97,87,82,70,104,103,51,55,79,55,113,86,89,87,115,108,57,86,121];
 function _qk_get() { return _qk.map(c => String.fromCharCode(c)).join(''); }
 
-// Unified AI call: tries Groq (8b for speed + rate limits), falls back to Anthropic, then Gemini
+// Premium AI call: Claude first (for brand detection, recruiter notes — quality matters)
+async function callAI_premium(prompt, maxTokens = 200) {
+  // Primary: Anthropic Claude Sonnet (best quality)
+  try {
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST', signal: AbortSignal.timeout(15000),
+      headers: { 'Content-Type': 'application/json', 'x-api-key': _ak_get(), 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
+      body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: maxTokens, messages: [{ role: 'user', content: prompt }] })
+    });
+    const d = await resp.json();
+    if (resp.ok && d.content?.[0]) return d.content[0].text.trim();
+    console.log('Anthropic failed, trying Groq:', d.error?.message || resp.status);
+  } catch(e) { console.log('Anthropic error:', e.message); }
+
+  // Fallback: Groq 70b (bigger model for quality tasks)
+  try {
+    const resp = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST', signal: AbortSignal.timeout(15000),
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + _qk_get() },
+      body: JSON.stringify({ model: 'llama-3.3-70b-versatile', max_tokens: maxTokens, temperature: 0.3, messages: [{ role: 'user', content: prompt }] })
+    });
+    const d = await resp.json();
+    if (resp.ok && d.choices?.[0]?.message?.content) return d.choices[0].message.content.trim();
+  } catch(e) {}
+
+  throw new Error('All AI providers failed');
+}
+
+// Standard AI call: Groq 8b first (fast + free for bulk tasks like resume extraction)
 async function callAI(prompt, maxTokens = 200) {
   // Primary: Groq llama-3.1-8b-instant (generous rate limits on free tier)
   try {
@@ -569,24 +597,25 @@ async function extractBranding() {
   let method = '';
 
   // ─── RUN CORS SCRAPE + AI IN PARALLEL ───
-  const brandPrompt = `You are a brand identity expert. Given a company website URL, identify their exact brand colors, typography, and logo URL.
+  const brandPrompt = `You are a senior brand designer. I need the EXACT brand identity for this website. Visit it mentally and recall its visual design.
 
-WEBSITE URL: ${url}
+WEBSITE: ${url}
 
-Provide:
-1. PRIMARY COLOR: Main brand color (buttons, links, logo). NOT gray/black/white.
-2. DARK COLOR: Dark header/footer background. Very dark shade.
-3. HIGHLIGHT COLOR: Secondary accent for hover states, CTAs. Contrasts with dark.
-4. HEADING FONT: Google Fonts name for headings. If proprietary, closest match (Helvetica Neue=Inter, Futura=Poppins).
-5. BODY FONT: Google Fonts name for body text.
-6. LOGO URL: Direct https:// URL to their logo image, or "" if unknown.
+RULES:
+- PRIMARY: The main brand color used on buttons, links, nav elements. Must be a saturated color, NEVER gray/black/white/beige.
+- DARK: The darkest color used in headers, footers, hero sections. Usually very dark (near black) or a deep shade of the brand color.
+- HIGHLIGHT: A secondary accent that contrasts with dark. Used for CTAs, badges, hover states. Often a complementary or analogous color.
+- FONTS: Use exact Google Fonts names. If the site uses a proprietary font, give the closest Google Fonts match (e.g., Helvetica Neue → Inter, Futura → Poppins, Freight → Lora, Circular → DM Sans).
+- LOGO: Direct https URL to their logo image if you know it. Otherwise "".
 
-Return ONLY valid JSON: {"primary":"#XXXXXX","dark":"#XXXXXX","highlight":"#XXXXXX","fontHeading":"Name","fontBody":"Name","logoUrl":""}`;
+IMPORTANT: Be precise. These colors will be used to create a branded page for this company. Generic guesses like #333333 or #3498db are unacceptable. I need their ACTUAL brand colors.
+
+Return ONLY valid JSON: {"primary":"#XXXXXX","dark":"#XXXXXX","highlight":"#XXXXXX","fontHeading":"FontName","fontBody":"FontName","logoUrl":""}`;
 
   // Fire both in parallel
   const [html, aiJson] = await Promise.allSettled([
     fetchWithProxy(url),
-    callAI(brandPrompt, 200).catch(() => null)
+    callAI_premium(brandPrompt, 200).catch(() => null)
   ]);
 
   // ── Process AI result (fast, reliable) ──
@@ -2056,7 +2085,7 @@ IMPORTANT: The example above is just a FORMAT reference. Write COMPLETELY NEW co
       for (let attempt = 0; attempt < 3 && !parsed; attempt++) {
         try {
           if (attempt > 0) showAIStatus('loading', `Retry ${attempt} for ${c.name}...`);
-          const text = await callAI(prompt, 500);
+          const text = await callAI_premium(prompt, 500);
           let jsonStr = text;
           // Strip markdown code fences (any format)
           jsonStr = jsonStr.replace(/^[\s\S]*?```(?:json)?\s*\n?/i, '').replace(/\n?\s*```[\s\S]*$/, '');
