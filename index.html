@@ -651,12 +651,47 @@ async function extractBranding() {
     });
     if (gfNames.length >= 2) { detectedFonts.heading = gfNames[0]; detectedFonts.body = gfNames[1]; }
     else if (gfNames.length === 1) { detectedFonts.heading = gfNames[0]; if (!detectedFonts.body) detectedFonts.body = gfNames[0]; }
+
+    // Extract CSS color signals for AI interpretation
+    const cssText = Array.from(doc.querySelectorAll('style')).map(s => s.textContent).join(' ');
+    const allColors = new Set();
+    for (const m of cssText.matchAll(/#[0-9a-fA-F]{6}/g)) allColors.add(m[0]);
+    const allVars = {};
+    for (const m of cssText.matchAll(/--([a-zA-Z0-9_-]+):\s*(#[0-9a-fA-F]{3,8})/gi)) allVars[m[1]] = m[2];
+    const allFontFamilies = new Set();
+    for (const m of cssText.matchAll(/font-family:\s*['"]?([^'";,}]+)/gi)) allFontFamilies.add(m[1].trim());
+
+    const cssSignals = 'CSS VARIABLES:\n' + Object.entries(allVars).slice(0, 40).map(([k,v]) => '  --' + k + ': ' + v).join('\n') +
+      '\n\nALL HEX COLORS: ' + [...allColors].slice(0, 30).join(', ') +
+      '\n\nFONT FAMILIES: ' + [...allFontFamilies].slice(0, 10).join(', ') +
+      (gfNames.length ? '\n\nGOOGLE FONTS: ' + gfNames.join(', ') : '');
+    console.log('[BRAND] CSS signals collected:', Object.keys(allVars).length + ' vars, ' + allColors.size + ' colors');
+
+    // ── STEP 2B: Send CSS signals to AI for interpretation ──
+    if (Object.keys(allVars).length > 0 || allColors.size > 3) {
+      showBrandStatus('loading', 'AI analyzing brand CSS...');
+      try {
+        const cssPrompt = 'You are a brand identity expert. Analyze these CSS signals from ' + url + ' and identify the brand colors.\n\n' + cssSignals + '\n\nRules:\n- primary: Main brand color (buttons, links, CTAs). Must be saturated. NEVER pick gray, black, or white.\n- dark: Darkest brand color used in backgrounds/headers.\n- highlight: Secondary accent that contrasts with dark.\n- fontHeading: Heading font from the font-family list or Google Fonts. Use exact Google Fonts name.\n- fontBody: Body font. Use exact Google Fonts name.\n\nReturn ONLY JSON: {"primary":"#XXXXXX","dark":"#XXXXXX","highlight":"#XXXXXX","fontHeading":"Name","fontBody":"Name"}';
+        let json = await callAI(cssPrompt, 200);
+        console.log('[BRAND] CSS AI raw:', json.substring(0, 200));
+        json = json.replace(/^[\s\S]*?```(?:json)?\s*\n?/i, '').replace(/\n?\s*```[\s\S]*$/, '');
+        if (!json.trim().startsWith('{')) { const m = json.match(/\{[\s\S]*\}/); if (m) json = m[0]; }
+        const ai = JSON.parse(json);
+        if (ai.primary && /^#[0-9a-fA-F]{6}$/.test(ai.primary)) detectedColors.primary = ai.primary;
+        if (ai.dark && /^#[0-9a-fA-F]{6}$/.test(ai.dark)) detectedColors.dark = ai.dark;
+        if (ai.highlight && /^#[0-9a-fA-F]{6}$/.test(ai.highlight)) detectedColors.highlight = ai.highlight;
+        if (ai.fontHeading && !detectedFonts.heading) detectedFonts.heading = ai.fontHeading;
+        if (ai.fontBody && !detectedFonts.body) detectedFonts.body = ai.fontBody;
+        method = 'css + ai';
+        console.log('[BRAND] CSS+AI detected:', JSON.stringify(detectedColors));
+      } catch(e) { console.log('[BRAND] CSS AI interpretation failed:', e.message); }
+    }
   }
 
-  // ── STEP 3: Send screenshot to Claude Vision for brand analysis ──
+  // ── STEP 3: Send screenshot to Claude Vision (only if CSS+AI didn't work) ──
   const screenshotBlob = screenshotResult.status === 'fulfilled' ? screenshotResult.value : null;
   console.log('[BRAND] Screenshot blob size:', screenshotBlob ? screenshotBlob.size : 'null');
-  if (screenshotBlob && screenshotBlob.size > 5000) {
+  if (!detectedColors.primary && screenshotBlob && screenshotBlob.size > 5000) {
     showBrandStatus('loading', 'AI analyzing website design...');
     try {
       // Convert blob to base64
@@ -707,12 +742,15 @@ async function extractBranding() {
     } catch(e) { console.log('[BRAND] Vision failed:', e.message); }
   }
 
-  // ── STEP 3B: Fallback to CSS-based AI if vision failed ──
+  // ── STEP 3B: Fallback — use Groq (always responds, unlike Claude which refuses to guess) ──
   if (!detectedColors.primary) {
     showBrandStatus('loading', 'Using AI to identify brand...');
+    console.log('[BRAND] Vision failed or unavailable, trying Groq fallback...');
     try {
-      const fallbackPrompt = 'Based on your knowledge of ' + url + ', provide the brand colors and fonts. Return ONLY JSON: {"primary":"#XXXXXX","dark":"#XXXXXX","highlight":"#XXXXXX","fontHeading":"Name","fontBody":"Name"}';
-      let json = await callAI_premium(fallbackPrompt, 200);
+      const fallbackPrompt = 'You are a web design expert. For the website ' + url + ', provide the brand identity colors and fonts. You MUST provide your best estimate based on the company name, industry, and common design patterns. NEVER say you cannot help. Return ONLY valid JSON:\n{"primary":"#XXXXXX","dark":"#XXXXXX","highlight":"#XXXXXX","fontHeading":"Name","fontBody":"Name"}';
+      // Use callAI (Groq first) — NOT callAI_premium (Claude refuses URL-only guesses)
+      let json = await callAI(fallbackPrompt, 200);
+      console.log('[BRAND] Groq fallback raw:', json.substring(0, 200));
       json = json.replace(/^[\s\S]*?```(?:json)?\s*\n?/i, '').replace(/\n?\s*```[\s\S]*$/, '');
       if (!json.trim().startsWith('{')) { const m = json.match(/\{[\s\S]*\}/); if (m) json = m[0]; }
       const ai = JSON.parse(json);
@@ -722,7 +760,8 @@ async function extractBranding() {
       if (ai.fontHeading && !detectedFonts.heading) detectedFonts.heading = ai.fontHeading;
       if (ai.fontBody && !detectedFonts.body) detectedFonts.body = ai.fontBody;
       if (!method) method = 'ai-fallback';
-    } catch(e) { console.log('AI fallback failed:', e.message); }
+      console.log('[BRAND] Groq fallback detected:', JSON.stringify(detectedColors));
+    } catch(e) { console.log('[BRAND] Groq fallback failed:', e.message); }
   }
 
   // ─── STEP 3: LOGO RELIABILITY CHAIN ───
