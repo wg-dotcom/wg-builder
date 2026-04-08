@@ -1701,32 +1701,101 @@ function buildResumeHTML(c, v) {
 </html>`;
 }
 
+// Normalize resume URLs to direct-download format
+function normalizeResumeUrl(url) {
+  if (!url) return url;
+  // Google Drive share links → direct download
+  // Format: https://drive.google.com/file/d/FILE_ID/view...
+  let m = url.match(/drive\.google\.com\/file\/d\/([^/]+)/);
+  if (m) return 'https://drive.google.com/uc?export=download&id=' + m[1];
+  // Format: https://drive.google.com/open?id=FILE_ID
+  m = url.match(/drive\.google\.com\/open\?id=([^&]+)/);
+  if (m) return 'https://drive.google.com/uc?export=download&id=' + m[1];
+  // Dropbox: replace dl=0 with dl=1
+  if (url.includes('dropbox.com')) return url.replace(/dl=0/, 'dl=1');
+  return url;
+}
+
+// Fetch PDF binary through CORS proxies
+async function fetchPDFviaProxy(url) {
+  const proxies = [
+    { url: `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}` },
+    { url: `https://corsproxy.io/?url=${encodeURIComponent(url)}` },
+    { url: url } // direct fetch as last resort
+  ];
+  const promises = proxies.map(async (p) => {
+    const resp = await fetch(p.url, { signal: AbortSignal.timeout(20000) });
+    if (!resp.ok) throw new Error('Proxy failed: ' + resp.status);
+    const blob = await resp.blob();
+    // Validate it's actually a PDF (check magic bytes or size)
+    if (blob.size < 100) throw new Error('Response too small, likely an error page');
+    if (blob.size > 10 * 1024 * 1024) throw new Error('PDF too large');
+    // Check if response is actually PDF or HTML error page
+    const firstBytes = await blob.slice(0, 5).text();
+    if (firstBytes === '%PDF-' || blob.type === 'application/pdf') return blob;
+    // Could be a binary PDF without proper content-type — accept if >1KB and not HTML
+    if (blob.size > 1000 && !firstBytes.startsWith('<') && !firstBytes.startsWith('{')) return blob;
+    throw new Error('Response is not a PDF');
+  });
+  return await Promise.any(promises);
+}
+
 // Fetch resume content from link (PDF binary or HTML text)
 async function fetchResumeContent(url) {
   if (!url) return null;
-  try {
-    // S3/direct PDF links: fetch binary and convert to base64
-    if (url.match(/\.pdf($|\?)/i) || url.includes('s3.') || url.includes('s3-')) {
-      const resp = await fetch(url, { signal: AbortSignal.timeout(15000) });
-      if (!resp.ok) throw new Error('PDF fetch failed: ' + resp.status);
-      const blob = await resp.blob();
-      if (blob.size > 5 * 1024 * 1024) throw new Error('PDF too large');
+  const normalizedUrl = normalizeResumeUrl(url);
+  console.log('[RESUME] Fetching:', url, '→', normalizedUrl);
+
+  // STRATEGY 1: PDF binary fetch (direct + CORS proxies)
+  // Try for any link that looks like a PDF or known file hosts
+  const isPDFLikely = normalizedUrl.match(/\.pdf($|\?)/i) ||
+    normalizedUrl.includes('s3.') || normalizedUrl.includes('s3-') ||
+    normalizedUrl.includes('drive.google.com/uc') ||
+    normalizedUrl.includes('fillout') || normalizedUrl.includes('dropbox') ||
+    normalizedUrl.includes('r2.dev') || normalizedUrl.includes('blob.core');
+
+  if (isPDFLikely) {
+    try {
+      console.log('[RESUME] Trying PDF binary fetch via proxies...');
+      const blob = await fetchPDFviaProxy(normalizedUrl);
+      console.log('[RESUME] PDF fetched:', blob.size, 'bytes');
       return { type: 'pdf', data: blob };
+    } catch(e) {
+      console.log('[RESUME] PDF proxy fetch failed:', e.message);
     }
-    // Profile pages: try CORS proxy to get HTML text
-    const html = await fetchWithProxy(url);
+  }
+
+  // STRATEGY 2: Even for non-obvious URLs, try PDF fetch (some links redirect to PDFs)
+  if (!isPDFLikely) {
+    try {
+      console.log('[RESUME] Trying speculative PDF fetch...');
+      const blob = await fetchPDFviaProxy(normalizedUrl);
+      console.log('[RESUME] Speculative PDF fetched:', blob.size, 'bytes');
+      return { type: 'pdf', data: blob };
+    } catch(e) {
+      console.log('[RESUME] Speculative PDF fetch failed:', e.message);
+    }
+  }
+
+  // STRATEGY 3: HTML text extraction via CORS proxy (profile pages, online resumes)
+  try {
+    console.log('[RESUME] Trying HTML text extraction...');
+    const html = await fetchWithProxy(normalizedUrl);
     if (html && html.length > 200) {
-      // Strip HTML tags, keep text
       const tmp = document.createElement('div');
       tmp.innerHTML = html;
-      // Remove scripts/styles
       tmp.querySelectorAll('script,style,nav,footer,header').forEach(el => el.remove());
       const text = tmp.textContent.replace(/\s+/g, ' ').trim();
-      if (text.length > 100) return { type: 'text', data: text.slice(0, 8000) };
+      if (text.length > 100) {
+        console.log('[RESUME] HTML text extracted:', text.length, 'chars');
+        return { type: 'text', data: text.slice(0, 8000) };
+      }
     }
   } catch(e) {
-    console.log('Resume fetch failed for ' + url + ':', e.message);
+    console.log('[RESUME] HTML extraction failed:', e.message);
   }
+
+  console.log('[RESUME] ALL fetch methods failed for:', url);
   return null;
 }
 
@@ -1755,7 +1824,7 @@ async function extractResumeFromPDF(pdfBlob, candidateName, roleTitle) {
         role: 'user',
         content: [
           { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: base64 } },
-          { type: 'text', text: 'Extract ALL content from this resume for ' + candidateName + ' (applying for ' + roleTitle + '). Copy EVERYTHING exactly as written. Do not summarize or skip anything.\n\nReturn ONLY valid JSON (no markdown, no code fences):\n{"summary":"Copy their professional summary/objective if present, otherwise write a brief 2-3 sentence summary from their experience. Max 150 words.","skillCategories":[{"category":"Category Name","skills":"Skill 1, Skill 2, Skill 3"}],"experience":[{"role":"Exact Job Title","company":"Exact Company Name","dates":"Exact dates as written","description":"Copy ALL bullet points from this role. Separate each bullet with a newline character."}],"education":[{"degree":"Exact Degree","school":"Exact School Name","year":"Year"}],"certifications":["Exact cert names"],"languages":[{"name":"Language","level":"Level"}]}' }
+          { type: 'text', text: 'Extract ALL content from this resume for ' + candidateName + ' (applying for ' + roleTitle + '). Copy EVERYTHING exactly as written. Do not summarize, skip, or invent anything.\n\nCRITICAL RULES:\n- ONLY include information that is EXPLICITLY written in the resume. Do NOT infer, guess, or fabricate any details.\n- If a section is not present in the resume, return an empty array for that field.\n- Copy job titles, company names, dates, and bullet points VERBATIM. Do not rephrase or enhance them.\n- If text is garbled or unreadable, skip it rather than guessing what it says.\n- NEVER invent skills, certifications, companies, or experience that are not clearly stated in the document.\n\nReturn ONLY valid JSON (no markdown, no code fences):\n{"summary":"Copy their professional summary/objective VERBATIM if present. If not present, return empty string. Do NOT write one yourself.","skillCategories":[{"category":"Category Name","skills":"Skill 1, Skill 2, Skill 3"}],"experience":[{"role":"Exact Job Title","company":"Exact Company Name","dates":"Exact dates as written","description":"Copy ALL bullet points from this role VERBATIM. Separate each bullet with a newline character."}],"education":[{"degree":"Exact Degree","school":"Exact School Name","year":"Year"}],"certifications":["Exact cert names"],"languages":[{"name":"Language","level":"Level"}]}' }
         ]
       }]
     })
@@ -1790,32 +1859,28 @@ async function generateResumeData() {
       } else if (resumeContent?.type === 'text') {
         // Send extracted text to AI for structuring
         showAIStatus('loading', 'Structuring resume for ' + c.name + '...');
-        const prompt = 'Extract ALL resume content for ' + c.name + ' from the text below. Copy EVERYTHING exactly. Do not summarize or skip.\n\n' +
+        const prompt = 'Extract ALL resume content for ' + c.name + ' from the text below. Copy EVERYTHING exactly as written. Do not summarize, skip, or invent anything.\n\nCRITICAL: ONLY include information EXPLICITLY present in the text. Do NOT infer, guess, or fabricate details. If something is garbled or unclear, skip it. NEVER invent skills, companies, or experience.\n\n' +
           'RESUME TEXT:\n' + resumeContent.data + '\n\n' +
           'Return ONLY valid JSON (no markdown, no code fences):\n' +
-          '{"summary":"Their professional summary or a brief 2-3 sentence one from their experience. Max 150 words.","skillCategories":[{"category":"Category","skills":"Skill1, Skill2"}],"experience":[{"role":"Exact Title","company":"Exact Company","dates":"Exact dates","description":"Copy ALL bullet points. Separate with newlines."}],"education":[{"degree":"Degree","school":"School","year":"Year"}],"certifications":["Exact names"],"languages":[{"name":"Lang","level":"Level"}]}';
+          '{"summary":"Copy their professional summary VERBATIM if present. If not present, return empty string.","skillCategories":[{"category":"Category","skills":"Skill1, Skill2"}],"experience":[{"role":"Exact Title","company":"Exact Company","dates":"Exact dates","description":"Copy ALL bullet points VERBATIM. Separate with newlines."}],"education":[{"degree":"Degree","school":"School","year":"Year"}],"certifications":["Exact names"],"languages":[{"name":"Lang","level":"Level"}]}';
         aiText = await callAI(prompt, 2000);
       } else {
-        // No resume file accessible. Use available data.
-        showAIStatus('loading', 'Building resume for ' + c.name + ' from available data...');
-        const allInfo = [
-          c.name ? 'Name: ' + c.name : '',
-          v.roleTitle ? 'Role: ' + v.roleTitle : '',
-          c.location ? 'Location: ' + c.location : '',
-          c.experience ? 'Experience: ' + c.experience : '',
-          c.skills ? 'Skills: ' + c.skills : '',
-          c.summary ? 'Strengths:\n' + c.summary : '',
-          c.recruiterNote ? 'Recruiter note: ' + c.recruiterNote : '',
-          c.resumeData?.experience?.length ? 'Work history:\n' + c.resumeData.experience.map(e =>
-            (e.role || '') + ' at ' + (e.company || '') + ' (' + (e.dates || '') + ')' + (e.description ? ': ' + e.description : '')
-          ).join('\n') : ''
-        ].filter(Boolean).join('\n');
-
-        const prompt = 'Structure a resume from this candidate data. ONLY use information explicitly stated. NEVER fabricate companies, roles, dates, schools, or certifications. If a section has no data, return empty array.\n\n' +
-          'CANDIDATE DATA:\n' + allInfo + '\n\n' +
-          'Return ONLY valid JSON (no markdown, no code fences):\n' +
-          '{"summary":"Professional summary, max 150 words. Factual, third person.","skillCategories":[{"category":"Category","skills":"Skill1, Skill2"}],"experience":[{"role":"Title","company":"Company","dates":"Dates","description":"2-3 bullets per role. Separate with newlines."}],"education":[{"degree":"Degree","school":"School","year":"Year"}],"certifications":["Only real ones"],"languages":[{"name":"Lang","level":"Level"}]}';
-        aiText = await callAI(prompt, 1500);
+        // Resume fetch failed — use ONLY literal spreadsheet data. NO AI generation.
+        // This prevents hallucinated company names, fake job titles, and invented dates.
+        console.log('[RESUME] Cannot access resume for ' + c.name + '. Using spreadsheet data only.');
+        showAIStatus('loading', 'Resume not accessible for ' + c.name + '. Using spreadsheet data only...');
+        const skills = c.skills ? c.skills.split(/[,;]/).map(s => s.trim()).filter(Boolean) : [];
+        c.resumeData = {
+          summary: c.summary || c.recruiterNote || '',
+          skillCategories: skills.length ? [{ category: 'Core Skills', skills: skills.join(', ') }] : [],
+          experience: c.resumeData?.experience?.length ? c.resumeData.experience : [],
+          education: [],
+          certifications: [],
+          languages: [],
+          fullExtract: true,
+          _sourceWarning: 'Resume link not accessible. Data from spreadsheet only.'
+        };
+        continue; // skip AI parsing below
       }
 
       // Parse the JSON response
@@ -2120,7 +2185,7 @@ async function generateAINotes() {
     try {
       const notebookContext = document.getElementById('notebookContext')?.value?.trim() || '';
 
-      const prompt = `You are Jesus Pacheco, Head of White Glove Hirings at Sagan. You present candidates to premium US clients like a sommelier presents wine. Each candidate is a unique vintage. Your job: make the client FEEL why this person fits, not just list qualifications.
+      const prompt = `You are Jesus Pacheco, Head of Revenue at Sagan. You present candidates to premium US clients like a sommelier presents wine. Each candidate is a unique vintage. Your job: make the client FEEL why this person fits, not just list qualifications.
 
 WHO YOU ARE: MIT Supply Chain master's. Telecom engineer from Venezuela. Based in Mendoza, Argentina. You think in systems, sell with stories, and write like you talk. You are NOT an AI. You are a real person who has vetted this candidate personally.
 
@@ -2322,19 +2387,29 @@ function mergeBatchIntoExisting(existingHTML, newCandidates, v) {
     }
   }
 
-  // ── Add new batch tab button ──
-  const newBtn = doc.createElement('button');
-  newBtn.className = 'batch-btn';
-  newBtn.setAttribute('onclick', `showBatch(${batchN})`);
-  newBtn.setAttribute('data-batch', String(batchN));
-  newBtn.innerHTML = `<span>Batch ${batchN}</span><span class="batch-count">${newCandidates.length}</span>`;
-  switcher.appendChild(newBtn);
+  // ── Add or replace batch tab button (dedup) ──
+  const existingBtn = switcher.querySelector(`[data-batch="${batchN}"]`);
+  if (existingBtn) {
+    existingBtn.innerHTML = `<span>Batch ${batchN}</span><span class="batch-count">${newCandidates.length}</span>`;
+  } else {
+    const newBtn = doc.createElement('button');
+    newBtn.className = 'batch-btn';
+    newBtn.setAttribute('onclick', `showBatch(${batchN})`);
+    newBtn.setAttribute('data-batch', String(batchN));
+    newBtn.innerHTML = `<span>Batch ${batchN}</span><span class="batch-count">${newCandidates.length}</span>`;
+    switcher.appendChild(newBtn);
+  }
   switcher.setAttribute('data-count', String(switcher.querySelectorAll('.batch-btn').length));
 
-  // ── Build new batch panel ──
-  // Count ALL existing cards across all panels for numbering
+  // ── Build new batch panel (dedup) ──
+  // Count existing cards in OTHER panels for numbering
   const allExistingCards = doc.querySelectorAll('.batch-panel .card');
-  const startIdx = allExistingCards.length;
+  const existingPanel = doc.getElementById(`batch-${batchN}`);
+  const cardsInExistingPanel = existingPanel ? existingPanel.querySelectorAll('.card').length : 0;
+  const startIdx = allExistingCards.length - cardsInExistingPanel;
+
+  // Remove existing panel if re-deploying same batch
+  if (existingPanel) existingPanel.remove();
 
   const newPanel = doc.createElement('div');
   newPanel.id = `batch-${batchN}`;
@@ -2349,6 +2424,14 @@ function mergeBatchIntoExisting(existingHTML, newCandidates, v) {
   // Insert new panel after the last existing batch panel
   const lastPanel = doc.querySelector('.batch-panel:last-of-type') || switcher;
   lastPanel.parentNode.insertBefore(newPanel, lastPanel.nextSibling);
+
+  // ── Inject WG card CSS if page was built by a different builder ──
+  if (!doc.querySelector('style[data-wg-card-css]')) {
+    const cardStyle = doc.createElement('style');
+    cardStyle.setAttribute('data-wg-card-css', '1');
+    cardStyle.textContent = `.candidate-card{margin-bottom:0}.card-top{display:flex;align-items:flex-start;justify-content:space-between;padding:24px 28px 16px}.card-identity{display:flex;align-items:center;gap:14px}.card-avatar{width:52px;height:52px;border-radius:50%;background:var(--primary,#131a1b);color:white;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:16px;flex-shrink:0;border:2px solid var(--border,#e2e8f0)}.card-location{display:flex;align-items:center;gap:5px;font-size:13px;color:var(--text-light,#6b7280);margin-top:4px}.card-badges{display:flex;gap:6px;margin-top:6px;flex-wrap:wrap}.badge{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:6px;font-size:11px;font-weight:600}.badge-shortlisted{background:#e0f2fe;color:#0369a1}.badge-tap{background:linear-gradient(135deg,#f59e0b,#d97706);color:white}.card-rate{text-align:right;flex-shrink:0}.card-rate-amount{font-size:20px;font-weight:800;color:var(--text-dark,#1a1a2e)}.card-rate-period{font-size:11px;color:var(--text-light,#6b7280);text-transform:uppercase;letter-spacing:.05em}.card-narrative{font-size:14px;color:var(--text-mid,#374151);line-height:1.7;padding:0 0 16px;font-style:italic;border-left:3px solid var(--primary,#131a1b);padding-left:16px;margin-bottom:16px}.exp-item{display:flex;gap:12px;margin-bottom:12px}.exp-dot-col{display:flex;flex-direction:column;align-items:center;padding-top:6px}.exp-dot{width:10px;height:10px;border-radius:50%;background:var(--primary,#131a1b);flex-shrink:0}.exp-line{width:2px;flex:1;background:var(--border,#e2e8f0);margin-top:4px}.exp-content{flex:1}.exp-highlight{font-size:12px;color:var(--text-light,#6b7280);margin-top:2px;font-style:italic}.tags-cluster{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px}.ctag{display:inline-block;padding:5px 14px;border-radius:100px;font-size:12px;font-weight:500;background:var(--bg-light,#f3f4f6);color:var(--text-mid,#374151);border:1px solid var(--border,#e2e8f0)}.ctag-key{background:var(--tag-bg,#e9e9ea);color:var(--tag-color,#1e2125);font-weight:600;border:none}.fit-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px}.fit-item{background:var(--bg-subtle,#f4f4f4);border-radius:10px;padding:14px;border:1px solid var(--border,#e2e8f0)}.fit-label{font-size:13px;color:var(--text-mid,#374151);line-height:1.5}.strength-bars{margin-bottom:16px}.bar-item{display:flex;align-items:center;gap:12px;margin-bottom:8px}.bar-label{font-size:12px;font-weight:600;color:var(--text-dark,#1a1a2e);min-width:120px;text-align:right}.bar-track{flex:1;height:8px;background:var(--bg-light,#f3f4f6);border-radius:4px;overflow:hidden}.bar-fill{height:100%;border-radius:4px;background:linear-gradient(90deg,var(--primary,#131a1b),var(--primary-dark,#0a0f10))}.card-actions{padding:8px 0 4px;display:flex;gap:10px}.video-intro-btn{display:inline-flex;align-items:center;gap:8px;padding:10px 20px;background:var(--primary,#131a1b);color:white;border-radius:8px;font-size:13px;font-weight:600;text-decoration:none;transition:background .2s}.video-intro-btn:hover{background:var(--primary-dark,#0a0f10)}@media(max-width:768px){.card-top{flex-direction:column;gap:12px}.fit-grid{grid-template-columns:1fr}.bar-label{min-width:80px;font-size:11px}}`;
+    doc.head.appendChild(cardStyle);
+  }
 
   // ── Update hero meta ──
   const heroMetaItems = doc.querySelectorAll('.hero-meta-item');
