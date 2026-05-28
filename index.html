@@ -1042,7 +1042,10 @@ async function pullFromSheet() {
     const batchIdx = headers.findIndex(h => h.includes('batch'));
     const titleIdx = headers.findIndex(h => h.includes('title') || h.includes('role'));
     const resumeIdx = headers.findIndex(h => h.includes('resume'));
-    const videoIdx = headers.findIndex(h => h.includes('video'));
+    // Video column: prefer link/url/intro/loom phrasings, skip status/reviewed/note/done/count flag columns
+    const isVideoStatusCol = h => /(status|reviewed|review|check|note|done|count|flag|recorded|sent|ready|qc|approved)/.test(h);
+    let videoIdx = headers.findIndex(h => /(video\s*link|video\s*url|video\s*intro|intro\s*video|loom\s*link|loom\s*url|loom\s*video)/.test(h) && !isVideoStatusCol(h));
+    if (videoIdx < 0) videoIdx = headers.findIndex(h => (h.includes('video') || h.includes('loom')) && !isVideoStatusCol(h));
     const portfolioIdx = headers.findIndex(h => h.includes('portfolio') || h.includes('website') || h.includes('github') || h.includes('behance') || h.includes('dribbble'));
     const tapIdx = headers.findIndex(h => h.includes('tap') || h.includes('talent agent'));
     const locationIdx = headers.findIndex(h => h.includes('location') || h.includes('country'));
@@ -2690,9 +2693,15 @@ function mergeBatchIntoExisting(existingHTML, newCandidates, v) {
   if (!doc.querySelector('style[data-batch-switcher]')) {
     const style = doc.createElement('style');
     style.setAttribute('data-batch-switcher', '1');
-    style.textContent = `.batch-switcher{display:flex;justify-content:center;align-items:center;gap:8px;margin:8px auto 36px;max-width:800px;padding:0 24px}.batch-switcher[data-count="1"]{display:none}.batch-btn{display:flex;align-items:center;gap:8px;padding:11px 22px;border:2px solid var(--border,#e2e8f0);border-radius:10px;background:white;font-size:14px;font-weight:600;color:#6b7280;cursor:pointer;transition:all .2s}.batch-btn:hover{border-color:var(--primary)}.batch-btn.active{background:var(--dark,#131a1b);border-color:var(--dark,#131a1b);color:white}.batch-count{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:var(--primary);color:white;font-size:11px;font-weight:700}.batch-btn.active .batch-count{background:var(--highlight,#00f9b8);color:var(--dark,#131a1b)}.batch-panel.hidden{display:none}`;
+    // !important + .batch-panel default-visible override defeats older convention `.batch-panel{display:none}.batch-panel.active{display:block}`
+    style.textContent = `.batch-switcher{display:flex;justify-content:center;align-items:center;gap:8px;margin:8px auto 36px;max-width:800px;padding:0 24px}.batch-switcher[data-count="1"]{display:none}.batch-btn{display:flex;align-items:center;gap:8px;padding:11px 22px;border:2px solid var(--border,#e2e8f0);border-radius:10px;background:white;font-size:14px;font-weight:600;color:#6b7280;cursor:pointer;transition:all .2s}.batch-btn:hover{border-color:var(--primary)}.batch-btn.active{background:var(--dark,#131a1b);border-color:var(--dark,#131a1b);color:white}.batch-count{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:var(--primary);color:white;font-size:11px;font-weight:700}.batch-btn.active .batch-count{background:var(--highlight,#00f9b8);color:var(--dark,#131a1b)}.batch-panel{display:block !important}.batch-panel.hidden{display:none !important}`;
     doc.head.appendChild(style);
   }
+
+  // ── Normalize legacy panels (built with .active-based convention) ──
+  // Old pages used .batch-panel { display:none } + .batch-panel.active { display:block }.
+  // We strip stale .active classes so the new .hidden-based convention governs visibility.
+  doc.querySelectorAll('.batch-panel.active').forEach(p => p.classList.remove('active'));
 
   // ── Inject showBatch JS if not already present ──
   if (!doc.querySelector('script[data-batch-js]')) {
@@ -2763,8 +2772,9 @@ function mergeBatchIntoExisting(existingHTML, newCandidates, v) {
     ${generateComparisonTable(newCandidates, v)}
   `;
 
-  // Insert new panel after the last existing batch panel
-  const lastPanel = doc.querySelector('.batch-panel:last-of-type') || switcher;
+  // Insert new panel after the last existing batch panel (use Array pop, :last-of-type can miss when siblings differ)
+  const allBatchPanels = Array.from(doc.querySelectorAll('.batch-panel'));
+  const lastPanel = allBatchPanels[allBatchPanels.length - 1] || switcher;
   lastPanel.parentNode.insertBefore(newPanel, lastPanel.nextSibling);
 
   // ── Inject WG card CSS if page was built by a different builder ──
