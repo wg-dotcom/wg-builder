@@ -2330,19 +2330,53 @@ async function autoDeploy() {
     // 3. Check for existing file (get SHA + content for multi-batch merge)
     let sha = null;
     let existingHTML = null;
+    let fileExistsOnRepo = false;
     try {
       const fileCheck = await fetch(`https://api.github.com/repos/${GH_ORG}/${repo}/contents/index.html`, {
         headers: { 'Authorization': `token ${token}`, 'Accept': 'application/vnd.github.v3+json' }
       });
       if (fileCheck.ok) {
+        fileExistsOnRepo = true;
         const fileData = await fileCheck.json();
         sha = fileData.sha;
         // Decode existing HTML for multi-batch merge
         if (parseInt(v.batchNumber) > 1) {
-          try { existingHTML = decodeURIComponent(escape(atob(fileData.content.replace(/\n/g, '')))); } catch(e) {}
+          // Try embedded base64 first (fast path for files < 1MB)
+          if (fileData.content) {
+            try { existingHTML = decodeURIComponent(escape(atob(fileData.content.replace(/\n/g, '')))); } catch(e) { console.warn('[merge] base64 decode failed:', e.message); }
+          }
+          // Fallback: file is > 1MB so GitHub omits content from the JSON. Fetch raw.
+          if (!existingHTML) {
+            console.log('[merge] embedded content empty, fetching raw');
+            try {
+              const rawResp = await fetch(`https://api.github.com/repos/${GH_ORG}/${repo}/contents/index.html`, {
+                headers: { 'Authorization': `token ${token}`, 'Accept': 'application/vnd.github.raw' }
+              });
+              if (rawResp.ok) { existingHTML = await rawResp.text(); }
+              else { console.warn('[merge] raw fetch returned', rawResp.status); }
+            } catch(e) { console.warn('[merge] raw fetch failed:', e.message); }
+          }
+          console.log('[merge] existingHTML fetched, length:', existingHTML ? existingHTML.length : 0);
         }
       }
-    } catch(e) {}
+    } catch(e) { console.warn('[merge] file check failed:', e.message); }
+
+    // SAFETY GATE: warn the user if they're about to overwrite an existing page with batch=1
+    if (fileExistsOnRepo && parseInt(v.batchNumber) === 1) {
+      const proceed = confirm(
+        '⚠️ This repo already has content but Batch Number is set to 1.\n\n' +
+        'Deploying now will OVERWRITE the existing page (you will lose previous batches).\n\n' +
+        'Did you mean to bump the Batch Number to 2 (or higher) to add a new batch instead?\n\n' +
+        'OK = overwrite the page (deploy as Batch 1)\n' +
+        'Cancel = stop, let me change the Batch Number'
+      );
+      if (!proceed) {
+        showToast('Deploy stopped. Change the Batch Number in Tab 1, then click Deploy again.', 'error');
+        btn.disabled = false;
+        btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"/><path d="M12 12v9"/><path d="m16 16-4-4-4 4"/></svg> Deploy';
+        return;
+      }
+    }
 
     // 4a. Extract real resume data BEFORE building cards
     await generateResumeData();
@@ -2350,7 +2384,16 @@ async function autoDeploy() {
     // 4b. Generate HTML — merge if multi-batch, otherwise fresh
     if (existingHTML && parseInt(v.batchNumber) > 1) {
       showToast(`Merging Batch ${v.batchNumber} into existing page...`, 'loading');
-      generatedHTML = mergeBatchIntoExisting(existingHTML, candidates, v);
+      try {
+        generatedHTML = mergeBatchIntoExisting(existingHTML, candidates, v);
+        console.log('[merge] merge complete, output length:', generatedHTML.length);
+      } catch(mergeErr) {
+        console.error('[merge] FAILED:', mergeErr);
+        throw new Error('Batch merge failed: ' + mergeErr.message + '. Existing page was NOT overwritten. Open DevTools console for details.');
+      }
+    } else if (parseInt(v.batchNumber) > 1 && fileExistsOnRepo) {
+      // Batch number says 2+ but we couldn't fetch existing HTML for some reason
+      throw new Error('Could not fetch existing page content to merge batch ' + v.batchNumber + ' into. Deploy stopped to avoid overwriting batch 1. Open DevTools console for details.');
     } else {
       generatedHTML = buildPresentationHTML();
     }
