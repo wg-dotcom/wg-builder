@@ -436,6 +436,12 @@
 
 <script>
 // ═══════════════════════════════════════════════════════════════
+// CONFIG — single source of truth for Claude model
+// (when Anthropic retires a model, change this one line)
+// ═══════════════════════════════════════════════════════════════
+const CLAUDE_MODEL = 'claude-sonnet-4-6';
+
+// ═══════════════════════════════════════════════════════════════
 // STATE
 // ═══════════════════════════════════════════════════════════════
 let candidates = [];
@@ -488,7 +494,7 @@ async function callAI_premium(prompt, maxTokens = 200) {
     const resp = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST', signal: AbortSignal.timeout(30000),
       headers: { 'Content-Type': 'application/json', 'x-api-key': _ak_get(), 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
-      body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: maxTokens, messages: [{ role: 'user', content: prompt }] })
+      body: JSON.stringify({ model: CLAUDE_MODEL, max_tokens: maxTokens, messages: [{ role: 'user', content: prompt }] })
     });
     const d = await resp.json();
     if (resp.ok && d.content?.[0]) return d.content[0].text.trim();
@@ -556,7 +562,7 @@ async function callAI(prompt, maxTokens = 200) {
     const resp = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST', signal: AbortSignal.timeout(15000),
       headers: { 'Content-Type': 'application/json', 'x-api-key': _ak_get(), 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
-      body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: maxTokens, messages: [{ role: 'user', content: prompt }] })
+      body: JSON.stringify({ model: CLAUDE_MODEL, max_tokens: maxTokens, messages: [{ role: 'user', content: prompt }] })
     });
     const d = await resp.json();
     if (resp.ok && d.content?.[0]) return d.content[0].text.trim();
@@ -787,7 +793,7 @@ async function extractBranding() {
           'anthropic-dangerous-direct-browser-access': 'true'
         },
         body: JSON.stringify({
-          model: 'claude-sonnet-4-6',
+          model: CLAUDE_MODEL,
           max_tokens: 200,
           messages: [{
             role: 'user',
@@ -2040,7 +2046,7 @@ async function extractResumeFromPDF(pdfBlob, candidateName, roleTitle) {
         'anthropic-dangerous-direct-browser-access': 'true'
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-6',
+        model: CLAUDE_MODEL,
         max_tokens: 3000,
         messages: [{
           role: 'user',
