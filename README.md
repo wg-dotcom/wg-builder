@@ -1,10 +1,7 @@
-# WG Presentation Builder v2.0
+# White Glove Builder redirect
 
-Self-service presentation builder for White Glove Talent Advisors.
+White Glove and Core now use one canonical tool:
 
-- Generates the Sagan GoRascal shortlist format.
-- Keeps candidate profiles first and the comparison table after them.
-- Shows video and embedded résumé as separate resources.
-- Lets the user edit safe text in preview without changing the layout.
-- Keeps preview edits when the page is published or merged into a later batch.
-- Runs a readiness audit before publish.
+https://wg-dotcom.github.io/rt-builder/
+
+The old White Glove URL redirects to Recruiting Builder so saved bookmarks do not break. Git history preserves the retired implementation for rollback.
